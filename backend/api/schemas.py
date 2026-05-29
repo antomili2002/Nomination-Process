@@ -30,3 +30,23 @@ class ReportGenerationRequest(BaseModel):
 class ReportGenerationResponse(BaseModel):
     report_id: str
     download_url: str
+
+
+class DeltaPairInfo(BaseModel):
+    left_index: int
+    right_index: int
+    left_name: str
+    right_name: str
+    pair_type: str              # "step" | "cumulative"
+    step_number: Optional[int] = None  # 1-based for steps, None for cumulative
+
+
+class ChainPreviewRequest(BaseModel):
+    upload_id: str
+    iv_chain: list[int] = Field(..., min_length=2)
+    ev_chain: list[int] = Field(..., min_length=2)
+
+
+class ChainPreviewResponse(BaseModel):
+    iv_pairs: list[DeltaPairInfo]
+    ev_pairs: list[DeltaPairInfo]

@@ -13,39 +13,48 @@ interface ChainState {
   ev: number[]
 }
 
-// Role tag colours
-function roleBadge(role: string | null) {
-  if (!role) return null
-  const cls =
-    role === 'base'    ? 'badge--navy'    :
-    role === 'outages' ? 'badge--blue'   :
-    role === 'new'     ? 'badge--success' : ''
-  return <span className={`badge ${cls}`}>{role}</span>
+// Mirrors the backend build_delta_pairs logic
+interface DeltaPairDisplay {
+  leftName: string
+  rightName: string
+  type: 'step' | 'cumulative'
+  stepNumber: number | null
+}
+
+function computeDeltaPairs(
+  chain: number[],
+  scenarios: ScenarioRow[],
+): DeltaPairDisplay[] {
+  const nameOf = (idx: number) =>
+    scenarios.find(s => s.index === idx)?.scenarioName ?? `Scenario ${idx}`
+
+  const pairs: DeltaPairDisplay[] = []
+  for (let i = 1; i < chain.length; i++) {
+    pairs.push({
+      leftName: nameOf(chain[i - 1]),
+      rightName: nameOf(chain[i]),
+      type: 'step',
+      stepNumber: i,
+    })
+  }
+  if (chain.length > 2) {
+    pairs.push({
+      leftName: nameOf(chain[0]),
+      rightName: nameOf(chain[chain.length - 1]),
+      type: 'cumulative',
+      stepNumber: null,
+    })
+  }
+  return pairs
 }
 
 export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
   const { scenarios, machines, uploadId, fileName } = uploadCtx
 
-  // Default chains from role hints
-  function defaultChain(): { iv: number[]; ev: number[] } {
-    const base    = scenarios.find(s => s.role === 'base')
-    const outages = scenarios.filter(s => s.role === 'outages')
-    const finals  = scenarios.filter(s => s.role === 'new')
+  // Start with the first two scenarios as the default chain; user edits from there
+  const fallback = scenarios.slice(0, 2).map(s => s.index)
 
-    const iv: number[] = []
-    const ev: number[] = []
-    if (base) { iv.push(base.index); ev.push(base.index) }
-    outages.forEach(o => { iv.push(o.index); ev.push(o.index) })
-    finals.forEach(f => { iv.push(f.index); ev.push(f.index) })
-
-    const fallback = scenarios.slice(0, 2).map(s => s.index)
-    return {
-      iv: iv.length >= 2 ? iv : fallback,
-      ev: ev.length >= 2 ? ev : fallback,
-    }
-  }
-
-  const [chains, setChains] = useState<ChainState>(() => defaultChain())
+  const [chains, setChains] = useState<ChainState>(() => ({ iv: fallback, ev: fallback }))
   const [selectedMachines, setSelectedMachines] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -101,7 +110,6 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
                 <th>Scenario Name</th>
                 <th>Scenario ID</th>
                 <th>Type</th>
-                <th>Role</th>
               </tr>
             </thead>
             <tbody>
@@ -115,7 +123,6 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
                   <td style={{ fontWeight: 'var(--weight-medium)' }}>{s.scenarioName}</td>
                   <td style={{ color: 'var(--clr-text-muted)', fontSize: 'var(--text-xs)' }}>{s.scenarioId}</td>
                   <td><span className="badge badge--navy">{s.scenarioType}</span></td>
-                  <td>{roleBadge(s.role)}</td>
                 </tr>
               ))}
             </tbody>
@@ -130,6 +137,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
           description="INTRINSIC_VALUE + POWER_POS"
           chain={chains.iv}
           scenarios={scenarios}
+          deltaPairs={computeDeltaPairs(chains.iv, scenarios)}
           onChange={(iv) => setChains(c => ({ ...c, iv }))}
         />
         <ChainEditor
@@ -138,6 +146,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
           chain={chains.ev}
           scenarios={scenarios}
           onChange={(ev) => setChains(c => ({ ...c, ev }))}
+          deltaPairs={computeDeltaPairs(chains.ev, scenarios)}
         />
       </div>
 
@@ -213,16 +222,17 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
   )
 }
 
-// ── Chain editor sub-component ──────────────────────────
+// Chain editor sub-component
 interface ChainEditorProps {
   label: string
   description: string
   chain: number[]
   scenarios: ScenarioRow[]
+  deltaPairs: DeltaPairDisplay[]
   onChange: (chain: number[]) => void
 }
 
-function ChainEditor({ label, description, chain, scenarios, onChange }: ChainEditorProps) {
+function ChainEditor({ label, description, chain, scenarios, deltaPairs, onChange }: ChainEditorProps) {
   const [adding, setAdding] = useState(false)
   const [addIdx, setAddIdx] = useState<number>(scenarios[0]?.index ?? 0)
 
@@ -309,9 +319,30 @@ function ChainEditor({ label, description, chain, scenarios, onChange }: ChainEd
       )}
 
       {chain.length >= 2 && (
-        <p style={{ marginTop: 'var(--sp-3)', fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)' }}>
-          {chain.length - 1} step delta{chain.length - 1 > 1 ? 's' : ''} + 1 cumulative delta
-        </p>
+        <div style={{ marginTop: 'var(--sp-4)', borderTop: '1px solid var(--clr-border)', paddingTop: 'var(--sp-3)' }}>
+          <p style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-medium)', color: 'var(--clr-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 'var(--sp-2)' }}>
+            Computed deltas
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+            {deltaPairs.map((p, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 'var(--text-xs)' }}>
+                <span style={{
+                  display: 'inline-block', minWidth: 80,
+                  padding: '1px 6px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                  background: p.type === 'cumulative' ? 'var(--clr-blue-light)' : 'var(--clr-bg)',
+                  border: `1px solid ${p.type === 'cumulative' ? 'var(--clr-blue)' : 'var(--clr-border)'}`,
+                  color: p.type === 'cumulative' ? 'var(--clr-blue)' : 'var(--clr-text-muted)',
+                  fontWeight: p.type === 'cumulative' ? 'var(--weight-medium)' : 'normal',
+                }}>
+                  {p.type === 'cumulative' ? 'Cumulative' : `Step ${p.stepNumber}`}
+                </span>
+                <span style={{ color: 'var(--clr-text-muted)' }}>{p.leftName}</span>
+                <span style={{ color: 'var(--clr-text-muted)' }}>→</span>
+                <span style={{ color: 'var(--clr-text)', fontWeight: 'var(--weight-medium)' }}>{p.rightName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
