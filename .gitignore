@@ -1,0 +1,10 @@
+.vscode/
+.idea/
+*.log
+*.tmp
+node_modules/
+
+# Ignore pycache and other Python artifacts
+__pycache__/
+*.pyc
+*.pyo

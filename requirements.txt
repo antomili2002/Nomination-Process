@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+python-dotenv
+
+pandas
+numpy
+openpyxl
+xlsxwriter
+
+pytest
+pytest-cov
+httpx
+
+loguru
