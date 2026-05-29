@@ -65,7 +65,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        Scenario Delta Report Generator Â· Uniper Energy SE
+        Scenario Delta Report Generator - Uniper Energy SE
       </footer>
     </div>
   )
