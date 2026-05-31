@@ -50,3 +50,34 @@ class ChainPreviewRequest(BaseModel):
 class ChainPreviewResponse(BaseModel):
     iv_pairs: list[DeltaPairInfo]
     ev_pairs: list[DeltaPairInfo]
+
+
+# Data preview — pivot tables for frontend visualisation
+class PivotRow(BaseModel):
+    year: int
+    tariff: str
+    values: list[float]          # aligned to PivotTable.months
+
+
+class PivotTable(BaseModel):
+    title: str                   # scenario name or "Base → Final" delta label
+    pair_type: Optional[str] = None   # None for monthly, "step"|"cumulative" for deltas
+    step_number: Optional[int] = None
+    months: list[int]            # e.g. [5, 6]
+    rows: list[PivotRow]
+
+
+class DataPreviewRequest(BaseModel):
+    upload_id: str
+    iv_chain: list[int] = Field(..., min_length=2)
+    ev_chain: list[int] = Field(..., min_length=2)
+    selected_machines: Optional[list[str]] = None
+
+
+class DataPreviewResponse(BaseModel):
+    available_machines: list[str]
+    ev_monthly: list[PivotTable]   # base + final EV scenarios
+    ev_deltas:  list[PivotTable]   # all EV delta pairs (steps + cumulative)
+    iv_monthly: list[PivotTable]   # base + final IV scenarios
+    iv_deltas:  list[PivotTable]   # all IV delta pairs
+    pp_monthly: list[PivotTable]   # power position (same IV scenarios)

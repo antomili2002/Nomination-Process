@@ -62,7 +62,28 @@ export function UploadPage({ onSuccess }: Props) {
         throw new Error(body?.detail ?? `Upload failed (${res.status})`)
       }
       const data = await res.json()
-      onSuccess(data)
+      onSuccess({
+        uploadId: data.upload_id,
+        fileName: data.file_name,
+        scenarios: data.scenarios.map((s: {
+          index: number
+          scenario_name: string
+          scenario_id: number
+          market_area: string
+          scenario_type: string
+          status: string
+          role: string | null
+        }) => ({
+          index: s.index,
+          scenarioName: s.scenario_name,
+          scenarioId: s.scenario_id,
+          marketArea: s.market_area,
+          scenarioType: s.scenario_type,
+          status: s.status,
+          role: s.role,
+        })),
+        machines: data.machines,
+      })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Upload failed.')
     } finally {
