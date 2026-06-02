@@ -81,3 +81,13 @@ class DataPreviewResponse(BaseModel):
     iv_monthly: list[PivotTable]   # base + final IV scenarios
     iv_deltas:  list[PivotTable]   # all IV delta pairs
     pp_monthly: list[PivotTable]   # power position (same IV scenarios)
+
+
+class GenerateReportResponse(BaseModel):
+    report_id: str
+    ev_monthly: list[PivotTable]
+    ev_deltas:  list[PivotTable]
+    iv_monthly: list[PivotTable]
+    iv_deltas:  list[PivotTable]
+    pp_monthly: list[PivotTable]
+    pp_deltas:  list[PivotTable]

@@ -1,0 +1,4 @@
+- Refactore /generate and /data_preview endpoint. Contains business logic
+for aggr and displaying data 
+- Remove old images
+- Schedule job for removing cached excels

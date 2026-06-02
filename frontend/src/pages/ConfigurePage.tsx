@@ -1,11 +1,11 @@
 ﻿import React, { useRef, useState } from 'react'
-import type { UploadContext, ScenarioRow } from '../App'
+import type { UploadContext, ScenarioRow, ReportData } from '../App'
 import { DataPreview } from '../components/DataPreview'
 
 interface Props {
   uploadCtx: UploadContext
   onBack: () => void
-  onSuccess: () => void
+  onSuccess: (data: ReportData) => void
 }
 
 interface ChainState {
@@ -125,7 +125,16 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         const d = await res.json().catch(() => ({}))
         throw new Error((d as { detail?: string })?.detail ?? `Generation failed (${res.status})`)
       }
-      onSuccess()
+      const payload = await res.json()
+      onSuccess({
+        reportId:  payload.report_id,
+        evMonthly: payload.ev_monthly,
+        evDeltas:  payload.ev_deltas,
+        ivMonthly: payload.iv_monthly,
+        ivDeltas:  payload.iv_deltas,
+        ppMonthly: payload.pp_monthly,
+        ppDeltas:  payload.pp_deltas,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Report generation failed.')
     } finally {
