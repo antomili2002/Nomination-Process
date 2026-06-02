@@ -1,4 +1,13 @@
-from fastapi import APIRouter, HTTPException
+"""HTTP layer for report endpoints.
+
+Each handler:
+  1. Calls the appropriate ``report_service`` function.
+  2. Catches domain exceptions and maps them to HTTP status codes.
+  3. Converts the returned plain-Python dict to a response schema.
+
+No business logic lives here.
+"""
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from backend.api.schemas import (
     ChainPreviewRequest,
@@ -13,231 +22,108 @@ from backend.api.schemas import (
     YearlyDeltaRow,
     YearlyDeltaTable,
 )
-from backend.core.constants import EV_COL, IV_COL, MACHINE_NAME_COL, POWER_POS_COL
 from backend.core.exceptions import InvalidChainError, InvalidWorkbookError, ScenarioExtractionError
-from backend.processing.chain_builder import build_delta_pairs, validate_chain
-from backend.processing.cleaning import clean_data
-from backend.processing.delta_output import compute_delta
-from backend.processing.monthly_output import aggregate_monthly
-from backend.processing.pivot import to_pivot_table
-from backend.processing.readers import read_workbook_sheets
-from backend.processing.scenario_extraction import extract_scenarios
-from backend.processing.yearly_delta_output import compute_yearly_delta
-from backend.storage.temp_files import get_upload_path
+from backend.services import report_service
+from backend.storage.temp_files import delete_upload
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
+# Exception mapper
+def _to_http(exc: Exception) -> HTTPException:
+    """Map domain exceptions to the correct HTTP status codes."""
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail="Upload not found.")
+    if isinstance(exc, (InvalidWorkbookError, InvalidChainError, ScenarioExtractionError)):
+        return HTTPException(status_code=422, detail=str(exc))
+    raise exc  # unexpected — let FastAPI's default 500 handler take over
 
+
+# Schema helpers
+def _to_pivot_tables(raw_list: list[dict]) -> list[PivotTable]:
+    return [
+        PivotTable(
+            title=t["title"],
+            pair_type=t.get("pair_type"),
+            step_number=t.get("step_number"),
+            months=t["months"],
+            rows=[PivotRow(**r) for r in t["rows"]],
+        )
+        for t in raw_list
+    ]
+
+
+def _to_yearly_delta_tables(raw_list: list[dict]) -> list[YearlyDeltaTable]:
+    return [
+        YearlyDeltaTable(
+            left_name=d["left_name"],
+            right_name=d["right_name"],
+            pair_type=d["pair_type"],
+            step_number=d["step_number"],
+            rows=[YearlyDeltaRow(**r) for r in d["rows"]],
+            left_total=d["left_total"],
+            right_total=d["right_total"],
+            delta_total=d["delta_total"],
+        )
+        for d in raw_list
+    ]
+
+# Endpoints
 @router.post("/preview-chain", response_model=ChainPreviewResponse)
 def preview_chain(body: ChainPreviewRequest):
-    """Validate IV/EV chains against the uploaded workbook and return the
-    delta pairs that would be computed when generating the report.
-
-    Use this to confirm the chain order before calling /reports/generate.
-    """
-    path = get_upload_path(body.upload_id)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Upload not found.")
-
+    """Validate IV/EV chains and return the delta pairs that would be computed."""
     try:
-        info_df, _ = read_workbook_sheets(path)
-    except InvalidWorkbookError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    try:
-        scenario_df = extract_scenarios(info_df)
-    except ScenarioExtractionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    index_to_name: dict[int, str] = dict(
-        zip(scenario_df["index"].tolist(), scenario_df["scenario_name"].tolist())
-    )
-    available = set(index_to_name)
-
-    try:
-        validate_chain(body.iv_chain, available)
-        validate_chain(body.ev_chain, available)
-    except InvalidChainError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    iv_pairs = build_delta_pairs(body.iv_chain, index_to_name)
-    ev_pairs = build_delta_pairs(body.ev_chain, index_to_name)
+        result = report_service.preview_chain(body.upload_id, body.iv_chain, body.ev_chain)
+    except Exception as exc:
+        raise _to_http(exc)
 
     return ChainPreviewResponse(
-        iv_pairs=[DeltaPairInfo(**vars(p)) for p in iv_pairs],
-        ev_pairs=[DeltaPairInfo(**vars(p)) for p in ev_pairs],
+        iv_pairs=[DeltaPairInfo(**vars(p)) for p in result["iv_pairs"]],
+        ev_pairs=[DeltaPairInfo(**vars(p)) for p in result["ev_pairs"]],
     )
 
 
 @router.post("/data-preview", response_model=DataPreviewResponse)
 def data_preview(body: DataPreviewRequest):
-    """Compute and return all monthly + delta pivot tables for the given chains.
-
-    The response is consumed by the frontend to render interactive pivot tables
-    with a machine-name slicer — identical in structure to the ground-truth Excel.
-
-    Machine handling:
-      selected_machines=null  → sums over all machines (Excel default)
-      selected_machines=[...] → filters to those machines first
-    """
-    path = get_upload_path(body.upload_id)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Upload not found.")
-
+    """Return monthly + delta pivot tables for the live frontend preview."""
     try:
-        info_df, data_df = read_workbook_sheets(path)
-    except InvalidWorkbookError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    try:
-        scenario_df = extract_scenarios(info_df)
-    except ScenarioExtractionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    data_df = clean_data(data_df)
-
-    index_to_name: dict[int, str] = dict(
-        zip(scenario_df["index"].tolist(), scenario_df["scenario_name"].tolist())
-    )
-    available = set(index_to_name)
-
-    try:
-        validate_chain(body.iv_chain, available)
-        validate_chain(body.ev_chain, available)
-    except InvalidChainError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    iv_pairs = build_delta_pairs(body.iv_chain, index_to_name)
-    ev_pairs = build_delta_pairs(body.ev_chain, index_to_name)
-    machines: list[str] = sorted(data_df[MACHINE_NAME_COL].dropna().unique().tolist())
-    sel = body.selected_machines
-
-    def _agg(scenario_names: list[str], metric: str):
-        return aggregate_monthly(data_df, scenario_names, metric, selected_machines=sel)
-
-    def _delta_table(left_name: str, right_name: str, metric: str, pair_type: str, step_number) -> PivotTable:
-        left_df = _agg([left_name], metric)
-        right_df = _agg([right_name], metric)
-        delta_df = compute_delta(left_df, right_df, metric, left_name, right_name)
-        raw = to_pivot_table(delta_df, metric)
-        return PivotTable(
-            title=f"{left_name} → {right_name}",
-            pair_type=pair_type,
-            step_number=step_number,
-            months=raw["months"],
-            rows=[PivotRow(**r) for r in raw["rows"]],
+        result = report_service.preview_data(
+            body.upload_id, body.iv_chain, body.ev_chain, body.selected_machines
         )
-
-    def _monthly_tables(chain_indices: list[int], metric: str) -> list[PivotTable]:
-        base_name  = index_to_name[chain_indices[0]]
-        final_name = index_to_name[chain_indices[-1]]
-        tables = []
-        for name in [base_name, final_name]:
-            agg = _agg([name], metric)
-            raw = to_pivot_table(agg, metric)
-            tables.append(PivotTable(
-                title=name,
-                months=raw["months"],
-                rows=[PivotRow(**r) for r in raw["rows"]],
-            ))
-        return tables
-
-    def _delta_tables(pairs, metric: str) -> list[PivotTable]:
-        return [
-            _delta_table(p.left_name, p.right_name, metric, p.pair_type, p.step_number)
-            for p in pairs
-        ]
+    except Exception as exc:
+        raise _to_http(exc)
 
     return DataPreviewResponse(
-        available_machines=machines,
-        ev_monthly=_monthly_tables(body.ev_chain, EV_COL),
-        ev_deltas=_delta_tables(ev_pairs, EV_COL),
-        iv_monthly=_monthly_tables(body.iv_chain, IV_COL),
-        iv_deltas=_delta_tables(iv_pairs, IV_COL),
-        pp_monthly=_monthly_tables(body.iv_chain, POWER_POS_COL),
+        available_machines=result["available_machines"],
+        ev_monthly=_to_pivot_tables(result["ev_monthly"]),
+        ev_deltas=_to_pivot_tables(result["ev_deltas"]),
+        iv_monthly=_to_pivot_tables(result["iv_monthly"]),
+        iv_deltas=_to_pivot_tables(result["iv_deltas"]),
+        pp_monthly=_to_pivot_tables(result["pp_monthly"]),
     )
 
 
 @router.post("/generate", response_model=GenerateReportResponse)
-def generate_report(body: ReportGenerationRequest):
-    """Compute all monthly and delta pivot tables for the configured chains.
+def generate_report(body: ReportGenerationRequest, background_tasks: BackgroundTasks):
+    """Compute all tables for the configured chains and return the report payload.
 
-    Returns a structured payload consumed by the ResultPage for in-browser
-    inspection.  The report_id can later be used to download the Excel file.
+    The uploaded workbook is deleted from disk as a background task once the
+    response has been sent, keeping temporary storage bounded.
     """
-    import uuid as _uuid
-
-    path = get_upload_path(body.upload_id)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Upload not found.")
-
     try:
-        info_df, data_df = read_workbook_sheets(path)
-    except InvalidWorkbookError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        result = report_service.generate_report(
+            body.upload_id, body.iv_chain, body.ev_chain, body.selected_machines
+        )
+    except Exception as exc:
+        raise _to_http(exc)
 
-    try:
-        scenario_df = extract_scenarios(info_df)
-    except ScenarioExtractionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    data_df = clean_data(data_df)
-
-    index_to_name: dict[int, str] = dict(
-        zip(scenario_df["index"].tolist(), scenario_df["scenario_name"].tolist())
-    )
-    available = set(index_to_name)
-
-    try:
-        validate_chain(body.iv_chain, available)
-        validate_chain(body.ev_chain, available)
-    except InvalidChainError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    iv_pairs = build_delta_pairs(body.iv_chain, index_to_name)
-    ev_pairs = build_delta_pairs(body.ev_chain, index_to_name)
-    sel = body.selected_machines
-
-    def _agg(scenario_names: list[str], metric: str):
-        return aggregate_monthly(data_df, scenario_names, metric, selected_machines=sel)
-
-    def _monthly(chain_indices: list[int], metric: str) -> list[PivotTable]:
-        tables = []
-        for idx in [chain_indices[0], chain_indices[-1]]:
-            name = index_to_name[idx]
-            raw  = to_pivot_table(_agg([name], metric), metric)
-            tables.append(PivotTable(
-                title=name, months=raw["months"],
-                rows=[PivotRow(**r) for r in raw["rows"]],
-            ))
-        return tables
-
-    def _deltas(pairs, metric: str) -> list[YearlyDeltaTable]:
-        result = []
-        for p in pairs:
-            left_df  = _agg([p.left_name], metric)
-            right_df = _agg([p.right_name], metric)
-            d = compute_yearly_delta(left_df, right_df, metric, p.left_name, p.right_name)
-            result.append(YearlyDeltaTable(
-                left_name=d["left_name"],
-                right_name=d["right_name"],
-                pair_type=p.pair_type,
-                step_number=p.step_number,
-                rows=[YearlyDeltaRow(**r) for r in d["rows"]],
-                left_total=d["left_total"],
-                right_total=d["right_total"],
-                delta_total=d["delta_total"],
-            ))
-        return result
-
-    report_id = str(_uuid.uuid4())
+    background_tasks.add_task(delete_upload, body.upload_id)
 
     return GenerateReportResponse(
-        report_id=report_id,
-        ev_monthly=_monthly(body.ev_chain, EV_COL),
-        ev_deltas=_deltas(ev_pairs, EV_COL),
-        iv_monthly=_monthly(body.iv_chain, IV_COL),
-        iv_deltas=_deltas(iv_pairs, IV_COL),
-        pp_monthly=_monthly(body.iv_chain, POWER_POS_COL),
-        pp_deltas=_deltas(iv_pairs, POWER_POS_COL),
+        report_id=result["report_id"],
+        ev_monthly=_to_pivot_tables(result["ev_monthly"]),
+        ev_deltas=_to_yearly_delta_tables(result["ev_deltas"]),
+        iv_monthly=_to_pivot_tables(result["iv_monthly"]),
+        iv_deltas=_to_yearly_delta_tables(result["iv_deltas"]),
+        pp_monthly=_to_pivot_tables(result["pp_monthly"]),
+        pp_deltas=_to_yearly_delta_tables(result["pp_deltas"]),
     )

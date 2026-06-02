@@ -27,11 +27,6 @@ class ReportGenerationRequest(BaseModel):
     selected_machines: Optional[list[str]] = None
 
 
-class ReportGenerationResponse(BaseModel):
-    report_id: str
-    download_url: str
-
-
 class DeltaPairInfo(BaseModel):
     left_index: int
     right_index: int

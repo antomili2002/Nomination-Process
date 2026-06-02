@@ -59,6 +59,17 @@ def get_report_path(report_id: str) -> Path:
     return files[0]
 
 
+def delete_upload(upload_id: str) -> None:
+    """Remove the upload directory for *upload_id*.
+
+    Called as a background task after report generation so that temporary
+    workbooks do not accumulate on disk.  Errors are silently ignored —
+    a failed cleanup should never surface to the user as an HTTP error.
+    """
+    upload_dir = settings.upload_dir / upload_id
+    shutil.rmtree(upload_dir, ignore_errors=True)
+
+
 # internal 
 def _validate_extension(filename: str) -> None:
     if not filename.lower().endswith(".xlsx"):
