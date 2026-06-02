@@ -190,6 +190,7 @@ def generate_report(
 
     return {
         "report_id":  str(uuid.uuid4()),
+        "upload_id":  upload_id,
         "ev_monthly": _monthly_pivot_tables(data_df, ev_chain, EV_COL, index_to_name, sel),
         "ev_deltas":  _yearly_delta_tables(data_df, ev_pairs, EV_COL, sel),
         "iv_monthly": _monthly_pivot_tables(data_df, iv_chain, IV_COL, index_to_name, sel),

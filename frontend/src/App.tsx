@@ -45,7 +45,12 @@ export interface YearlyDeltaTable {
 }
 
 export interface ReportData {
-  reportId:  string
+  reportId:        string
+  uploadId:        string
+  ivChain:         number[]
+  evChain:         number[]
+  machines:        string[]        // all available machines (from upload)
+  selectedMachines: string[] | null // machines used for this report (null = all)
   evMonthly: PivotTableData[]
   evDeltas:  YearlyDeltaTable[]
   ivMonthly: PivotTableData[]

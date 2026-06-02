@@ -7,7 +7,7 @@ Each handler:
 
 No business logic lives here.
 """
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from backend.api.schemas import (
     ChainPreviewRequest,
@@ -24,7 +24,6 @@ from backend.api.schemas import (
 )
 from backend.core.exceptions import InvalidChainError, InvalidWorkbookError, ScenarioExtractionError
 from backend.services import report_service
-from backend.storage.temp_files import delete_upload
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -103,12 +102,8 @@ def data_preview(body: DataPreviewRequest):
 
 
 @router.post("/generate", response_model=GenerateReportResponse)
-def generate_report(body: ReportGenerationRequest, background_tasks: BackgroundTasks):
-    """Compute all tables for the configured chains and return the report payload.
-
-    The uploaded workbook is deleted from disk as a background task once the
-    response has been sent, keeping temporary storage bounded.
-    """
+def generate_report(body: ReportGenerationRequest):
+    """Compute all tables for the configured chains and return the report payload."""
     try:
         result = report_service.generate_report(
             body.upload_id, body.iv_chain, body.ev_chain, body.selected_machines
@@ -116,10 +111,9 @@ def generate_report(body: ReportGenerationRequest, background_tasks: BackgroundT
     except Exception as exc:
         raise _to_http(exc)
 
-    background_tasks.add_task(delete_upload, body.upload_id)
-
     return GenerateReportResponse(
         report_id=result["report_id"],
+        upload_id=result["upload_id"],
         ev_monthly=_to_pivot_tables(result["ev_monthly"]),
         ev_deltas=_to_yearly_delta_tables(result["ev_deltas"]),
         iv_monthly=_to_pivot_tables(result["iv_monthly"]),

@@ -138,13 +138,16 @@ class TestGenerateReport:
         })
         assert resp.status_code == 200
 
-    def test_report_id_present(self, uploaded):
+    def test_report_id_and_upload_id_present(self, uploaded):
         resp = client.post("/reports/generate", json={
             "upload_id": uploaded["upload_id"],
             "iv_chain": _IV_CHAIN_SIMPLE,
             "ev_chain": _EV_CHAIN_SIMPLE,
         })
-        assert "report_id" in resp.json()
+        data = resp.json()
+        assert "report_id" in data
+        # upload_id echoed back so clients can recompute with a different machine filter
+        assert data["upload_id"] == uploaded["upload_id"]
 
     def test_monthly_tables_count(self, uploaded):
         resp = client.post("/reports/generate", json={
@@ -206,8 +209,12 @@ class TestGenerateReport:
         assert len(rows) == 1
         assert rows[0]["year"] == 2026
 
-    def test_machine_filter_with_known_machine(self, uploaded, sample_workbook_bytes):
-        """Filtering by the only machine in the fixture yields the same totals."""
+    def test_machine_filter_with_known_machine(self, uploaded):
+        """Filtering by the only machine in the fixture yields the same totals.
+
+        Since uploads are no longer deleted after generate, we can reuse the
+        same upload_id for both the unfiltered and the filtered request.
+        """
         resp_no_filter = client.post("/reports/generate", json={
             "upload_id": uploaded["upload_id"],
             "iv_chain": _IV_CHAIN_SIMPLE,
@@ -215,16 +222,33 @@ class TestGenerateReport:
         })
         totals_no_filter = resp_no_filter.json()["ev_deltas"][0]["delta_total"]
 
-        # Fresh upload for the filtered request (previous file was cleaned up)
-        fresh = _upload(sample_workbook_bytes)
         resp_filtered = client.post("/reports/generate", json={
-            "upload_id": fresh["upload_id"],
+            "upload_id": uploaded["upload_id"],
             "iv_chain": _IV_CHAIN_SIMPLE,
             "ev_chain": _EV_CHAIN_SIMPLE,
             "selected_machines": ["MACHINE_A"],
         })
         totals_filtered = resp_filtered.json()["ev_deltas"][0]["delta_total"]
         assert totals_filtered == pytest.approx(totals_no_filter)
+
+    def test_recompute_with_same_upload_id(self, uploaded):
+        """The upload file persists after generate, allowing machine-filter recomputes."""
+        uid = uploaded["upload_id"]
+        # First call — all machines
+        r1 = client.post("/reports/generate", json={
+            "upload_id": uid, "iv_chain": _IV_CHAIN_SIMPLE, "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert r1.status_code == 200
+        # Second call — same upload_id, explicit machine filter; must not 404
+        r2 = client.post("/reports/generate", json={
+            "upload_id": uid, "iv_chain": _IV_CHAIN_SIMPLE, "ev_chain": _EV_CHAIN_SIMPLE,
+            "selected_machines": ["MACHINE_A"],
+        })
+        assert r2.status_code == 200
+        # Values must be equal (only one machine in fixture)
+        assert r1.json()["ev_deltas"][0]["delta_total"] == pytest.approx(
+            r2.json()["ev_deltas"][0]["delta_total"]
+        )
 
     def test_unknown_upload_returns_404(self):
         resp = client.post("/reports/generate", json={

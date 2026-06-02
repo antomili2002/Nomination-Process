@@ -98,6 +98,7 @@ class YearlyDeltaTable(BaseModel):
 
 class GenerateReportResponse(BaseModel):
     report_id: str
+    upload_id: str
     ev_monthly: list[PivotTable]
     ev_deltas:  list[YearlyDeltaTable]
     iv_monthly: list[PivotTable]

@@ -126,7 +126,12 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
       }
       const payload = await res.json()
       onSuccess({
-        reportId:  payload.report_id,
+        reportId:        payload.report_id,
+        uploadId:        uploadId,
+        ivChain:         chains.iv,
+        evChain:         chains.ev,
+        machines:        machines,
+        selectedMachines: apiMachines,
         evMonthly: payload.ev_monthly,
         evDeltas:  payload.ev_deltas,
         ivMonthly: payload.iv_monthly,
