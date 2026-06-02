@@ -44,10 +44,6 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
     ev: scenarios.slice(0, 2).map(s => s.index),
   })
 
-  // Machine multi-select: always a Set; all selected = send null to API
-  const [selMachines, setSelMachines] = useState<Set<string>>(() => new Set(machines))
-  const apiMachines = selMachines.size === machines.length ? null : [...selMachines]
-
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -92,19 +88,6 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
     setChains(prev => ({ ...prev, [chain]: prev[chain].filter((_, i) => i !== pos) }))
   }
 
-  function toggleMachine(m: string) {
-    setSelMachines(prev => {
-      const next = new Set(prev)
-      if (next.has(m)) {
-        if (next.size === 1) return prev  // keep at least one
-        next.delete(m)
-      } else {
-        next.add(m)
-      }
-      return next
-    })
-  }
-
   async function handleGenerate() {
     setLoading(true)
     setError(null)
@@ -113,7 +96,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         upload_id: uploadId,
         iv_chain: chains.iv,
         ev_chain: chains.ev,
-        selected_machines: apiMachines,
+        selected_machines: null,
       }
       const res = await fetch('/api/reports/generate', {
         method: 'POST',
@@ -131,7 +114,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         ivChain:         chains.iv,
         evChain:         chains.ev,
         machines:        machines,
-        selectedMachines: apiMachines,
+        selectedMachines: null,
         evMonthly: payload.ev_monthly,
         evDeltas:  payload.ev_deltas,
         ivMonthly: payload.iv_monthly,
@@ -327,60 +310,6 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
             </div>
           )
         })}
-      </div>
-
-      {/* Machine filter — multi-select chips */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
-          <div>
-            <p className="section-label" style={{ margin: 0 }}>Machine Filter</p>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', marginTop: 2 }}>
-              Select one, multiple, or all machines to include in the report
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexShrink: 0 }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)' }}>
-              {selMachines.size}/{machines.length} selected
-            </span>
-            {selMachines.size < machines.length && (
-              <button className="btn btn--ghost btn--sm" onClick={() => setSelMachines(new Set(machines))}>
-                All
-              </button>
-            )}
-            {selMachines.size > 1 && (
-              <button className="btn btn--ghost btn--sm" onClick={() => setSelMachines(new Set([machines[0]]))}>
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
-          {machines.map(m => {
-            const sel = selMachines.has(m)
-            return (
-              <button
-                key={m}
-                type="button"
-                onClick={() => toggleMachine(m)}
-                style={{
-                  padding: '5px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                  fontSize: 'var(--text-xs)', fontWeight: sel ? 'var(--weight-medium)' : 'normal',
-                  background: sel ? 'var(--clr-blue)' : 'var(--clr-bg)',
-                  color: sel ? '#fff' : 'var(--clr-text-muted)',
-                  border: `1px solid ${sel ? 'var(--clr-blue)' : 'var(--clr-border)'}`,
-                  transition: 'all 0.12s',
-                }}
-              >
-                {m}
-              </button>
-            )
-          })}
-        </div>
-        {selMachines.size < machines.length && (
-          <p style={{ marginTop: 'var(--sp-3)', fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', borderTop: '1px solid var(--clr-border)', paddingTop: 'var(--sp-2)' }}>
-            Report will include data for {selMachines.size} machine{selMachines.size !== 1 ? 's' : ''}: {[...selMachines].join(', ')}
-          </p>
-        )}
       </div>
 
       {error && <div className="alert alert--error" role="alert">{error}</div>}

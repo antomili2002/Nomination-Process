@@ -1,17 +1,10 @@
 Refactoring:
-- Remove old images in assets
-- Schedule job for removing cached excels, check if it works
 - add persistence, for later retrieval of generated reports (e.g. for download endpoint)
-- refactor routes_upload.py
-- let claude generate the refactoring report
+- update documentation for cached results and machine filter 
+- update documentation for download
 
-Features:
-- minus sign for negative deltas in the UI
-- download excel with correct formatting (e.g. EVs as numbers, not strings)
-- machine filter dynamically based on machines selected from user in the dashboard view
-- export Info and Data sheet as well in output excel
+Refactoring:
+- 
 
 Tests:
 - Check Test Coverage and run tests
-- add more tests for report service
-- add more tests for report api

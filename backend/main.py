@@ -5,8 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes_upload import router as upload_router
+from backend.api.routes_download import router as download_router
 from backend.api.routes_reports import router as reports_router
+from backend.api.routes_upload import router as upload_router
 from backend.core.config import settings
 
 _UPLOAD_TTL_SECONDS = 4 * 3600  # keep uploads for 4 hours
@@ -49,3 +50,4 @@ app.add_middleware(
 
 app.include_router(upload_router)
 app.include_router(reports_router)
+app.include_router(download_router)

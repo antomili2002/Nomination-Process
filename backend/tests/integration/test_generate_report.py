@@ -265,3 +265,61 @@ class TestGenerateReport:
             "ev_chain": _EV_CHAIN_SIMPLE,
         })
         assert resp.status_code == 422
+
+
+# POST /reports/export
+class TestExportReport:
+    def test_returns_200(self, uploaded):
+        resp = client.post("/reports/export", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert resp.status_code == 200
+
+    def test_content_type_is_xlsx(self, uploaded):
+        resp = client.post("/reports/export", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert _XLSX_MIME in resp.headers["content-type"]
+
+    def test_content_disposition_attachment(self, uploaded):
+        resp = client.post("/reports/export", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert "attachment" in resp.headers.get("content-disposition", "")
+
+    def test_response_is_valid_xlsx(self, uploaded):
+        """The bytes returned must be a loadable Excel workbook."""
+        resp = client.post("/reports/export", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        import io as _io
+        import openpyxl
+        wb = openpyxl.load_workbook(_io.BytesIO(resp.content))
+        assert "EV_month" in wb.sheetnames
+        assert "Info" in wb.sheetnames
+        assert "Data" in wb.sheetnames
+
+    def test_unknown_upload_returns_404(self):
+        resp = client.post("/reports/export", json={
+            "upload_id": "00000000-0000-0000-0000-000000000000",
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert resp.status_code == 404
+
+    def test_invalid_chain_returns_422(self, uploaded):
+        resp = client.post("/reports/export", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": [0, 99],
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert resp.status_code == 422
+

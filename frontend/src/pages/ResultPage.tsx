@@ -370,6 +370,9 @@ export function ResultPage({ reportData, onReset }: Props) {
   const [recomputing, setRecomputing]   = useState(false)
   const [recomputeError, setRecomputeError] = useState<string | null>(null)
 
+  // ── Download state ───────────────────────────────────────────────────────
+  const [downloading, setDownloading] = useState(false)
+
   // Machine popover
   const [showMenu, setShowMenu]         = useState(false)
   const [pendingSel, setPendingSel]     = useState<Set<string>>(
@@ -395,6 +398,44 @@ export function ResultPage({ reportData, onReset }: Props) {
       else next.add(m)
       return next
     })
+  }
+
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      const resp = await fetch('/api/reports/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          upload_id: activeData.uploadId,
+          iv_chain:  activeData.ivChain,
+          ev_chain:  activeData.evChain,
+          selected_machines: activeData.selectedMachines,
+        }),
+      })
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}))
+        throw new Error((d as { detail?: string })?.detail ?? `Download failed (${resp.status})`)
+      }
+      // Extract filename from Content-Disposition header if present
+      const disposition = resp.headers.get('content-disposition') ?? ''
+      const match = disposition.match(/filename="([^"]+)"/)
+      const filename = match ? match[1] : `scenario_report_${Date.now()}.xlsx`
+
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Download failed.')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   async function applyMachineFilter() {
@@ -609,8 +650,15 @@ export function ResultPage({ reportData, onReset }: Props) {
               )}
             </div>
 
-            <button className="btn btn--ghost btn--sm" disabled title="Excel download coming soon">
-              ↓ Download Excel
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={handleDownload}
+              disabled={downloading || recomputing}
+            >
+              {downloading
+                ? <><span className="spinner spinner--sm" aria-hidden="true" />Downloading…</>
+                : <>↓ Download Excel</>
+              }
             </button>
           </div>
         </div>
