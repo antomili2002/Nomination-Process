@@ -1,6 +1,17 @@
-- Refactore /generate and /data_preview endpoint. Contains business logic
-for aggr and displaying data 
-- Remove old images
-- Schedule job for removing cached excels
-- add persistence
-- add excel export
+Refactoring:
+- Remove old images in assets
+- Schedule job for removing cached excels, check if it works
+- add persistence, for later retrieval of generated reports (e.g. for download endpoint)
+- refactor routes_upload.py
+- let claude generate the refactoring report
+
+Features:
+- minus sign for negative deltas in the UI
+- download excel with correct formatting (e.g. EVs as numbers, not strings)
+- machine filter dynamically based on machines selected from user in the dashboard view
+- export Info and Data sheet as well in output excel
+
+Tests:
+- Check Test Coverage and run tests
+- add more tests for report service
+- add more tests for report api
