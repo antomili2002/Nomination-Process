@@ -72,7 +72,7 @@ function fmtY(v: number): string {
 function fmtDif(v: number): { text: string; color?: string } {
   if (Math.abs(v) < 0.0005) return { text: '' }
   const s = Math.abs(v).toLocaleString('en-GB', FMT3)
-  if (v < 0) return { text: `(${s})`, color: '#c0392b' }
+  if (v < 0) return { text: `-${s}`, color: '#c0392b' }
   return { text: s, color: 'var(--clr-blue)' }
 }
 
@@ -388,7 +388,7 @@ export function ResultPage({ reportData, onReset }: Props) {
 
         <div style={{ padding: 'var(--sp-4)' }}>
           <button className="btn btn--ghost btn--sm" onClick={onReset} style={{ width: '100%' }}>
-            `\u2190` New Report
+            ← New Report
           </button>
         </div>
       </aside>
