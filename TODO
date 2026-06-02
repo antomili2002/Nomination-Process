@@ -1,7 +1,5 @@
 Refactoring:
 - add persistence, for later retrieval of generated reports (e.g. for download endpoint)
-- update documentation for cached results and machine filter 
-- update documentation for download
 
 Refactoring:
 - 
