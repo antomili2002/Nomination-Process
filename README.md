@@ -1388,3 +1388,22 @@ The most important project abstraction is:
 ```text
 Scenario chains → Delta pairs → Long output tables → Excel report
 ```
+
+
+## 17. Completed Features & Implementation Details
+
+### Frontend Caching and Filter Optimization
+The frontend `ResultPage` includes an optimized local caching mechanism for the machine filter:
+- When a user filters by specific `MACHINE_NAME`s, the frontend locally caches the generated report data under a unique key representing the sorted machine selections.
+- If the user re-selects a previously generated combination of machines, the frontend will restore the UI instantly from the memory cache instead of requesting a new generation from the backend.
+- The UI handles "All Machines" as a distinct state and explicitly disables unchanged applies.
+
+### Excel Export & Formatting
+The finalized file export delivers an exact visual match of the anticipated spreadsheet schema:
+- **Download Handling:** The backend endpoint seamlessly streams a binary byte response. The frontend intercepts the `Content-Disposition` header to pull exactly named binary blobs without causing browser streaming hangs.
+- **Excel Styling & Theming:** Generates a completely static formatted flat-table that mimics Pivot Table aesthetics exactly matching the design prototypes.
+  - Generates pristine white workspaces by removing default gridlines via `ws.sheet_view.showGridLines = False`.
+  - Implements uniform Hex backgrounds (`C0E6F5`) bridging Global Metadata filters, Header rows, and Grand Totals alongside matching custom bottom borders spanning the matrices.
+  - Assigns exactly formatted Fonts: `Aptos Narrow, 11pt`, conditionally assigned `Bold` weight for active metadata, column headers, and scenario categories.
+  - Instantiates exact Number Format strings (`#,##0`) explicitly injecting thousands-separators to correct native Excel rendering outputs instead of raw floats.
+  - Deploys multi-tier programmatic cell indentation mapping hierarchy natively without whitespace injection and aggressively sets column explicit dimensions (widths) to preclude `#####` text overflowing.
