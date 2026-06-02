@@ -4,6 +4,7 @@ Styling applied explicitly matching ground-truth exports.
 - Font: Aptos Narrow, 11pt.
 - Bold/Fills for Pivot tables.
 - Number formats for floats.
+- Gridlines removed, specific blue colors and bottom borders added.
 """
 from __future__ import annotations
 
@@ -12,20 +13,18 @@ from typing import Optional
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 _FONT_DEFAULT = Font(name="Aptos Narrow", size=11)
 _FONT_BOLD = Font(name="Aptos Narrow", size=11, bold=True)
-_FONT_BOLD_RED = Font(name="Aptos Narrow", size=11, bold=True, color="C00000")
-_FONT_RED = Font(name="Aptos Narrow", size=11, color="C00000")
 
-_FILL_HEADERS = PatternFill(start_color="D9E1F2", fill_type="solid")
-_FILL_GRAND_TOTAL = PatternFill(start_color="B8CCE4", fill_type="solid")
-_FILL_SCENARIO_RIGHT = PatternFill(start_color="EBF3FB", fill_type="solid")
-_FILL_SCENARIO_LEFT = PatternFill(start_color="F5F5F5", fill_type="solid")
+_COLOR_BLUE = "C0E6F5"
+_FILL_BLUE = PatternFill(start_color=_COLOR_BLUE, fill_type="solid")
+
+_BORDER_BOTTOM_BLUE = Border(bottom=Side(style="medium", color=_COLOR_BLUE))
 
 _NUM_FMT = "#,##0"
-
 _ALL_MONTHS = list(range(1, 13))  # 1..12
 
 
@@ -35,7 +34,7 @@ def write_report(
     data_df: pd.DataFrame,
 ) -> bytes:
     wb = Workbook()
-    del wb["Sheet"]  # remove the default empty sheet
+    del wb["Sheet"]
 
     _write_monthly_sheet(wb, "EV_month", report_data["ev_monthly"], "EXTRINSIC_VALUE",      "EV")
     _write_delta_sheet  (wb, "EV_sheet", report_data["ev_deltas"],  "EXTRINSIC_VALUE",      "EV")
@@ -52,15 +51,17 @@ def write_report(
     return buf.getvalue()
 
 
-def _w(ws, row: int, col: int, value, font=_FONT_DEFAULT, fill=None, indent=0, num_fmt=None) -> None:
+def _w(ws, row: int, col: int, value, font=_FONT_DEFAULT, fill=None, indent=0, num_fmt=None, border=None) -> None:
     c = ws.cell(row=row, column=col, value=value)
     c.font = font
-    if fill:
+    if fill is not None:
         c.fill = fill
     if indent > 0:
         c.alignment = Alignment(indent=indent)
-    if num_fmt:
+    if num_fmt is not None:
         c.number_format = num_fmt
+    if border is not None:
+        c.border = border
 
 
 def _month_values(data_months: list[int], values: list[float]) -> list[Optional[float]]:
@@ -76,18 +77,25 @@ def _write_monthly_sheet(
     output_type: str,
 ) -> None:
     ws = wb.create_sheet(sheet_name)
+    ws.sheet_view.showGridLines = False
+
     ws.column_dimensions["A"].width = 35
+    for col_idx in range(2, 15):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 17
 
-    _w(ws, 1, 1, "OUTPUT_TYPE", fill=_FILL_HEADERS);   _w(ws, 1, 2, output_type)
-    _w(ws, 2, 1, "MACHINE_NAME", fill=_FILL_HEADERS);  _w(ws, 2, 2, "(All)")
+    _w(ws, 1, 1, "OUTPUT_TYPE", fill=_FILL_BLUE);   _w(ws, 1, 2, output_type, fill=_FILL_BLUE)
+    _w(ws, 2, 1, "MACHINE_NAME", fill=_FILL_BLUE);  _w(ws, 2, 2, "(All)", fill=_FILL_BLUE)
 
-    _w(ws, 4, 1, f"Sum of {metric_col}", font=_FONT_BOLD, fill=_FILL_HEADERS)
-    _w(ws, 4, 2, "Column Labels", font=_FONT_BOLD, fill=_FILL_HEADERS)
+    _w(ws, 4, 1, f"Sum of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE)
+    _w(ws, 4, 2, "Column Labels", font=_FONT_BOLD, fill=_FILL_BLUE)
+    # Fill remaining row 4 items
+    for c in range(3, 15):
+        _w(ws, 4, c, None, fill=_FILL_BLUE)
 
-    _w(ws, 5, 1, "Row Labels", font=_FONT_BOLD, fill=_FILL_HEADERS)
+    _w(ws, 5, 1, "Row Labels", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
     for i, m in enumerate(_ALL_MONTHS):
-        _w(ws, 5, i + 2, m, font=_FONT_BOLD, fill=_FILL_HEADERS)
-    _w(ws, 5, 14, "Grand Total", font=_FONT_BOLD, fill=_FILL_HEADERS)
+        _w(ws, 5, i + 2, m, font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+    _w(ws, 5, 14, "Grand Total", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
 
     row_num = 6
     all_month_totals = [0.0] * 12
@@ -102,13 +110,14 @@ def _write_monthly_sheet(
         sc_grand = sum(v for v in sc_vals if v is not None)
 
         # Scenario header
-        _w(ws, row_num, 1, str(pt["title"]), font=_FONT_BOLD)
+        _w(ws, row_num, 1, str(pt["title"]), font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
         for i, v in enumerate(sc_vals):
+            # Apply border to all timeline cells under scenario row
+            _w(ws, row_num, i + 2, v, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
             if v is not None:
-                _w(ws, row_num, i + 2, v, font=_FONT_BOLD, num_fmt=_NUM_FMT)
                 all_month_totals[i] += v
                 has_data[i] = True
-        _w(ws, row_num, 14, sc_grand, font=_FONT_BOLD, num_fmt=_NUM_FMT)
+        _w(ws, row_num, 14, sc_grand, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
         row_num += 1
 
         years: dict[int, list[dict]] = {}
@@ -139,11 +148,13 @@ def _write_monthly_sheet(
                 row_num += 1
 
     grand_total = sum(all_month_totals)
-    _w(ws, row_num, 1, "Grand Total", font=_FONT_BOLD, fill=_FILL_GRAND_TOTAL)
+    _w(ws, row_num, 1, "Grand Total", font=_FONT_BOLD, fill=_FILL_BLUE)
     for i, v in enumerate(all_month_totals):
         if has_data[i]:
-            _w(ws, row_num, i + 2, v, font=_FONT_BOLD, fill=_FILL_GRAND_TOTAL, num_fmt=_NUM_FMT)
-    _w(ws, row_num, 14, grand_total, font=_FONT_BOLD, fill=_FILL_GRAND_TOTAL, num_fmt=_NUM_FMT)
+            _w(ws, row_num, i + 2, v, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT)
+        else:
+            _w(ws, row_num, i + 2, None, font=_FONT_BOLD, fill=_FILL_BLUE)
+    _w(ws, row_num, 14, grand_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT)
 
 
 def _write_delta_sheet(
@@ -154,16 +165,20 @@ def _write_delta_sheet(
     output_type: str,
 ) -> None:
     ws = wb.create_sheet(sheet_name)
+    ws.sheet_view.showGridLines = False
+
     ws.column_dimensions["A"].width = 35
-    ws.column_dimensions["B"].width = 20
-    ws.column_dimensions["C"].width = 20
+    ws.column_dimensions["B"].width = 25
+    ws.column_dimensions["C"].width = 25
 
-    _w(ws, 1, 1, "OUTPUT_TYPE", fill=_FILL_HEADERS);   _w(ws, 1, 2, output_type)
-    _w(ws, 2, 1, "MACHINE_NAME", fill=_FILL_HEADERS);  _w(ws, 2, 2, "(All)")
+    _w(ws, 1, 1, "OUTPUT_TYPE", fill=_FILL_BLUE);   _w(ws, 1, 2, output_type, fill=_FILL_BLUE)
+    _w(ws, 1, 3, None, fill=_FILL_BLUE)
+    _w(ws, 2, 1, "MACHINE_NAME", fill=_FILL_BLUE);  _w(ws, 2, 2, "(All)", fill=_FILL_BLUE)
+    _w(ws, 2, 3, None, fill=_FILL_BLUE)
 
-    _w(ws, 4, 1, "Row Labels", font=_FONT_BOLD, fill=_FILL_HEADERS)
-    _w(ws, 4, 2, f"Sum of {metric_col}", font=_FONT_BOLD, fill=_FILL_HEADERS)
-    _w(ws, 4, 3, f"Dif of {metric_col}", font=_FONT_BOLD, fill=_FILL_HEADERS)
+    _w(ws, 4, 1, "Row Labels", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+    _w(ws, 4, 2, f"Sum of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+    _w(ws, 4, 3, f"Dif of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
 
     row_num = 5
 
@@ -175,9 +190,9 @@ def _write_delta_sheet(
         delta_total: float = dt["delta_total"]
         dt_rows: list[dict] = dt["rows"]
 
-        _w(ws, row_num, 1, right_name, font=_FONT_BOLD)
-        _w(ws, row_num, 2, right_total, font=_FONT_BOLD, num_fmt=_NUM_FMT)
-        _w(ws, row_num, 3, delta_total, font=_FONT_BOLD, num_fmt=_NUM_FMT)
+        _w(ws, row_num, 1, right_name, font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 2, right_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 3, delta_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
         row_num += 1
 
         for r in dt_rows:
@@ -186,8 +201,9 @@ def _write_delta_sheet(
             _w(ws, row_num, 3, r["delta"], num_fmt=_NUM_FMT)
             row_num += 1
 
-        _w(ws, row_num, 1, left_name, font=_FONT_BOLD)
-        _w(ws, row_num, 2, left_total, font=_FONT_BOLD, num_fmt=_NUM_FMT)
+        _w(ws, row_num, 1, left_name, font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 2, left_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 3, None, border=_BORDER_BOTTOM_BLUE)
         row_num += 1
 
         for r in dt_rows:
@@ -196,8 +212,9 @@ def _write_delta_sheet(
             row_num += 1
 
         # Add Grand Total per pair
-        _w(ws, row_num, 1, "Grand Total", font=_FONT_BOLD, fill=_FILL_GRAND_TOTAL)
-        _w(ws, row_num, 2, right_total + left_total, font=_FONT_BOLD, fill=_FILL_GRAND_TOTAL, num_fmt=_NUM_FMT)
+        _w(ws, row_num, 1, "Grand Total", font=_FONT_BOLD, fill=_FILL_BLUE)
+        _w(ws, row_num, 2, right_total + left_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT)
+        _w(ws, row_num, 3, None, fill=_FILL_BLUE)
         row_num += 2
 
 
