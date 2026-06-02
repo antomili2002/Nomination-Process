@@ -9,7 +9,6 @@ import type { PivotTableData } from './components/PivotTable'
 
 export type AppStep = 'upload' | 'configure' | 'result'
 
-// Uploaded file context shared across steps
 export interface UploadContext {
   uploadId: string
   fileName: string
@@ -27,14 +26,32 @@ export interface ScenarioRow {
   role: string | null
 }
 
+export interface YearlyDeltaRow {
+  year: number
+  left_value: number
+  right_value: number
+  delta: number
+}
+
+export interface YearlyDeltaTable {
+  left_name: string
+  right_name: string
+  pair_type: string
+  step_number: number | null
+  rows: YearlyDeltaRow[]
+  left_total: number
+  right_total: number
+  delta_total: number
+}
+
 export interface ReportData {
-  reportId: string
+  reportId:  string
   evMonthly: PivotTableData[]
-  evDeltas:  PivotTableData[]
+  evDeltas:  YearlyDeltaTable[]
   ivMonthly: PivotTableData[]
-  ivDeltas:  PivotTableData[]
+  ivDeltas:  YearlyDeltaTable[]
   ppMonthly: PivotTableData[]
-  ppDeltas:  PivotTableData[]
+  ppDeltas:  YearlyDeltaTable[]
 }
 
 function App() {

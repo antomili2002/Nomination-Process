@@ -2,3 +2,6 @@
 for aggr and displaying data 
 - Remove old images
 - Schedule job for removing cached excels
+- remove data data_preview
+- add persistence
+- add excel export

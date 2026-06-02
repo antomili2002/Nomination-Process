@@ -10,6 +10,8 @@ from backend.api.schemas import (
     PivotRow,
     PivotTable,
     ReportGenerationRequest,
+    YearlyDeltaRow,
+    YearlyDeltaTable,
 )
 from backend.core.constants import EV_COL, IV_COL, MACHINE_NAME_COL, POWER_POS_COL
 from backend.core.exceptions import InvalidChainError, InvalidWorkbookError, ScenarioExtractionError
@@ -20,6 +22,7 @@ from backend.processing.monthly_output import aggregate_monthly
 from backend.processing.pivot import to_pivot_table
 from backend.processing.readers import read_workbook_sheets
 from backend.processing.scenario_extraction import extract_scenarios
+from backend.processing.yearly_delta_output import compute_yearly_delta
 from backend.storage.temp_files import get_upload_path
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -198,19 +201,6 @@ def generate_report(body: ReportGenerationRequest):
     def _agg(scenario_names: list[str], metric: str):
         return aggregate_monthly(data_df, scenario_names, metric, selected_machines=sel)
 
-    def _make_pivot(left_name: str, right_name: str, metric: str, pair_type: str, step_number) -> PivotTable:
-        left_df  = _agg([left_name], metric)
-        right_df = _agg([right_name], metric)
-        delta_df = compute_delta(left_df, right_df, metric, left_name, right_name)
-        raw = to_pivot_table(delta_df, metric)
-        return PivotTable(
-            title=f"{left_name} → {right_name}",
-            pair_type=pair_type,
-            step_number=step_number,
-            months=raw["months"],
-            rows=[PivotRow(**r) for r in raw["rows"]],
-        )
-
     def _monthly(chain_indices: list[int], metric: str) -> list[PivotTable]:
         tables = []
         for idx in [chain_indices[0], chain_indices[-1]]:
@@ -222,8 +212,23 @@ def generate_report(body: ReportGenerationRequest):
             ))
         return tables
 
-    def _deltas(pairs, metric: str) -> list[PivotTable]:
-        return [_make_pivot(p.left_name, p.right_name, metric, p.pair_type, p.step_number) for p in pairs]
+    def _deltas(pairs, metric: str) -> list[YearlyDeltaTable]:
+        result = []
+        for p in pairs:
+            left_df  = _agg([p.left_name], metric)
+            right_df = _agg([p.right_name], metric)
+            d = compute_yearly_delta(left_df, right_df, metric, p.left_name, p.right_name)
+            result.append(YearlyDeltaTable(
+                left_name=d["left_name"],
+                right_name=d["right_name"],
+                pair_type=p.pair_type,
+                step_number=p.step_number,
+                rows=[YearlyDeltaRow(**r) for r in d["rows"]],
+                left_total=d["left_total"],
+                right_total=d["right_total"],
+                delta_total=d["delta_total"],
+            ))
+        return result
 
     report_id = str(_uuid.uuid4())
 

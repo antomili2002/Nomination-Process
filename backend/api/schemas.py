@@ -83,11 +83,29 @@ class DataPreviewResponse(BaseModel):
     pp_monthly: list[PivotTable]   # power position (same IV scenarios)
 
 
+class YearlyDeltaRow(BaseModel):
+    year: int
+    left_value: float
+    right_value: float
+    delta: float          # right − left
+
+
+class YearlyDeltaTable(BaseModel):
+    left_name:   str
+    right_name:  str
+    pair_type:   str                 # "step" | "cumulative"
+    step_number: Optional[int] = None
+    rows:        list[YearlyDeltaRow]
+    left_total:  float
+    right_total: float
+    delta_total: float               # right_total − left_total
+
+
 class GenerateReportResponse(BaseModel):
     report_id: str
     ev_monthly: list[PivotTable]
-    ev_deltas:  list[PivotTable]
+    ev_deltas:  list[YearlyDeltaTable]
     iv_monthly: list[PivotTable]
-    iv_deltas:  list[PivotTable]
+    iv_deltas:  list[YearlyDeltaTable]
     pp_monthly: list[PivotTable]
-    pp_deltas:  list[PivotTable]
+    pp_deltas:  list[YearlyDeltaTable]

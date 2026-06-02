@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react'
-import type { ReportData } from '../App'
+import type { ReportData, YearlyDeltaTable } from '../App'
 import type { PivotTableData } from '../components/PivotTable'
 
 interface Props {
@@ -26,27 +26,152 @@ const SECTIONS: Section[] = [
   { id: 'pp-deltas',  label: 'Deltas',   metric: 'POWER_POS__GWH',        group: 'Power Position', isDeltas: true  },
 ]
 
-function getTables(d: ReportData, id: SectionId): PivotTableData[] {
+function getMonthlyTables(d: ReportData, id: SectionId): PivotTableData[] {
   switch (id) {
     case 'ev-monthly': return d.evMonthly
-    case 'ev-deltas':  return d.evDeltas
     case 'iv-monthly': return d.ivMonthly
-    case 'iv-deltas':  return d.ivDeltas
     case 'pp-monthly': return d.ppMonthly
-    case 'pp-deltas':  return d.ppDeltas
+    default: return []
   }
 }
 
+function getYearlyDeltas(d: ReportData, id: SectionId): YearlyDeltaTable[] {
+  switch (id) {
+    case 'ev-deltas': return d.evDeltas
+    case 'iv-deltas': return d.ivDeltas
+    case 'pp-deltas': return d.ppDeltas
+    default: return []
+  }
+}
+
+function getSectionCount(d: ReportData, id: SectionId): number {
+  const sec = SECTIONS.find(s => s.id === id)!
+  return sec.isDeltas ? getYearlyDeltas(d, id).length : getMonthlyTables(d, id).length
+}
+
+const FMT3 = { minimumFractionDigits: 3, maximumFractionDigits: 3 } as const
+
 function fmtN(v: number): string {
-  if (Math.abs(v) < 0.005) return `\u2014`
+  if (Math.abs(v) < 0.005) return '\u2014'
   return Math.round(v).toLocaleString('en-GB')
 }
 
+// Used by ExcelPivotSection (monthly tables, rounded integers)
 function fmtDelta(v: number): { text: string; color?: string } {
-  if (Math.abs(v) < 0.005) return { text: `\u2014` }
+  if (Math.abs(v) < 0.005) return { text: '\u2014' }
   const abs = Math.round(Math.abs(v)).toLocaleString('en-GB')
   if (v < 0) return { text: `(${abs})`, color: '#c0392b' }
   return { text: abs, color: 'var(--clr-blue)' }
+}
+
+function fmtY(v: number): string {
+  if (Math.abs(v) < 0.0005) return '\u2014'
+  return v.toLocaleString('en-GB', FMT3)
+}
+
+function fmtDif(v: number): { text: string; color?: string } {
+  if (Math.abs(v) < 0.0005) return { text: '' }
+  const s = Math.abs(v).toLocaleString('en-GB', FMT3)
+  if (v < 0) return { text: `(${s})`, color: '#c0392b' }
+  return { text: s, color: 'var(--clr-blue)' }
+}
+
+// ── Yearly-aggregate delta table (matches Excel screenshot format) ─────────
+
+function YearlyDeltaSection({ tables, metric }: { tables: YearlyDeltaTable[]; metric: string }) {
+  if (tables.length === 0)
+    return <p style={{ color: 'var(--clr-text-muted)', fontStyle: 'italic' }}>No data available.</p>
+
+  const TH: React.CSSProperties = {
+    padding: '5px 10px', fontWeight: 700, fontSize: 'var(--text-xs)',
+    background: '#d9e1f2', borderBottom: '2px solid #8ea9d8',
+    whiteSpace: 'nowrap', borderRight: '1px solid #b8c9e0',
+  }
+  const TD: React.CSSProperties = {
+    padding: '3px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+    fontSize: 'var(--text-xs)', borderRight: '1px solid var(--clr-border)', whiteSpace: 'nowrap',
+  }
+  const TDL: React.CSSProperties = { ...TD, textAlign: 'left', fontVariantNumeric: 'normal' }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
+      {tables.map((t, ti) => {
+        const grandTotal = t.left_total + t.right_total
+        return (
+          <div key={ti}>
+            {/* Pair type badge */}
+            {t.pair_type && (
+              <div style={{ marginBottom: 'var(--sp-2)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+                <span style={{
+                  fontSize: 9, padding: '2px 8px', borderRadius: 3,
+                  background: t.pair_type === 'cumulative' ? 'var(--clr-blue)' : '#6c757d', color: '#fff',
+                  fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                }}>
+                  {t.pair_type === 'cumulative' ? 'Cumulative' : `Step ${t.step_number}`}
+                </span>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)' }}>
+                  {t.right_name} vs {t.left_name}
+                </span>
+              </div>
+            )}
+
+            <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
+              <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...TH, textAlign: 'left', minWidth: 260 }}>Row Labels</th>
+                    <th style={{ ...TH, minWidth: 140 }}>Sum of {metric}</th>
+                    <th style={{ ...TH, minWidth: 140 }}>Dif of {metric}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* RIGHT scenario (the "new" one) — shows both Sum and Dif */}
+                  <tr style={{ background: '#ebf3fb' }}>
+                    <td style={{ ...TDL, paddingLeft: 10, fontWeight: 700, color: 'var(--clr-blue)' }}>{t.right_name}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.right_total)}</td>
+                    <td style={{ ...TD, fontWeight: 700, color: t.delta_total < 0 ? '#c0392b' : 'var(--clr-blue)' }}>
+                      {fmtDif(t.delta_total).text}
+                    </td>
+                  </tr>
+                  {t.rows.map((row, ri) => {
+                    const { text, color } = fmtDif(row.delta)
+                    return (
+                      <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                        <td style={{ ...TDL, paddingLeft: 24 }}>{row.year}</td>
+                        <td style={TD}>{fmtY(row.right_value)}</td>
+                        <td style={{ ...TD, color }}>{text}</td>
+                      </tr>
+                    )
+                  })}
+
+                  {/* LEFT scenario (base) — Sum only, no Dif */}
+                  <tr style={{ background: '#f5f5f5', borderTop: '1px solid var(--clr-border)' }}>
+                    <td style={{ ...TDL, paddingLeft: 10, fontWeight: 700, color: 'var(--clr-text-muted)' }}>{t.left_name}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.left_total)}</td>
+                    <td style={TD} />
+                  </tr>
+                  {t.rows.map((row, ri) => (
+                    <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={{ ...TDL, paddingLeft: 24 }}>{row.year}</td>
+                      <td style={TD}>{fmtY(row.left_value)}</td>
+                      <td style={TD} />
+                    </tr>
+                  ))}
+
+                  {/* Grand Total */}
+                  <tr style={{ background: '#b8cce4', fontWeight: 700, borderTop: '2px solid #8ea9d8' }}>
+                    <td style={{ ...TDL, paddingLeft: 10 }}>Grand Total</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(grandTotal)}</td>
+                    <td style={TD} />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function ExcelPivotSection({ tables, isDelta }: { tables: PivotTableData[]; isDelta: boolean }) {
@@ -203,7 +328,6 @@ export function ResultPage({ reportData, onReset }: Props) {
   const [activeId, setActiveId] = useState<SectionId>('ev-monthly')
 
   const activeSection = SECTIONS.find(s => s.id === activeId)!
-  const activeTables  = getTables(reportData, activeId)
 
   const groups = ['EV', 'IV', 'Power Position'] as const
 
@@ -229,7 +353,7 @@ export function ResultPage({ reportData, onReset }: Props) {
                 {group}
               </p>
               {groupSections.map(sec => {
-                const tables = getTables(reportData, sec.id)
+                const count = getSectionCount(reportData, sec.id)
                 const isActive = activeId === sec.id
                 return (
                   <button
@@ -253,7 +377,7 @@ export function ResultPage({ reportData, onReset }: Props) {
                       background: isActive ? 'rgba(255,255,255,0.25)' : 'var(--clr-bg)',
                       color: isActive ? '#fff' : 'var(--clr-text-muted)',
                     }}>
-                      {tables.length}
+                      {count}
                     </span>
                   </button>
                 )
@@ -277,15 +401,18 @@ export function ResultPage({ reportData, onReset }: Props) {
             </h2>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', marginTop: 4 }}>
               Sum of <code style={{ background: 'var(--clr-bg)', padding: '1px 4px', borderRadius: 3 }}>{activeSection.metric}</code>
-              {` \u00b7 `}{activeTables.length} table{activeTables.length !== 1 ? 's' : ''}
+              {` \u00b7 `}{getSectionCount(reportData, activeId)} table{getSectionCount(reportData, activeId) !== 1 ? 's' : ''}
             </p>
           </div>
           <button className="btn btn--ghost btn--sm" disabled title="Excel download coming soon" style={{ flexShrink: 0 }}>
-            `\u2193` Download Excel
+            ↓ Download Excel
           </button>
         </div>
 
-        <ExcelPivotSection tables={activeTables} isDelta={activeSection.isDeltas} />
+        {activeSection.isDeltas
+          ? <YearlyDeltaSection tables={getYearlyDeltas(reportData, activeId)} metric={activeSection.metric} />
+          : <ExcelPivotSection  tables={getMonthlyTables(reportData, activeId)} isDelta={false} />
+        }
       </div>
     </div>
   )

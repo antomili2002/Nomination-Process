@@ -1,6 +1,5 @@
 ﻿import React, { useRef, useState } from 'react'
 import type { UploadContext, ScenarioRow, ReportData } from '../App'
-import { DataPreview } from '../components/DataPreview'
 
 interface Props {
   uploadCtx: UploadContext
@@ -324,11 +323,6 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
           )
         })}
       </div>
-
-      {/* Live data preview */}
-      {chains.iv.length >= 2 && chains.ev.length >= 2 && (
-        <DataPreview uploadId={uploadId} ivChain={chains.iv} evChain={chains.ev} />
-      )}
 
       {/* Machine filter — multi-select chips */}
       <div className="card">
