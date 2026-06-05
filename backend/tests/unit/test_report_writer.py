@@ -309,59 +309,50 @@ def test_ev_sheet_metadata(wb):
     assert ws.cell(2, 2).value == "(All)"
 
 
+def test_ev_sheet_metadata_fill_stops_at_column_b(wb):
+    ws = wb["EV_sheet"]
+    assert ws.cell(1, 1).fill.fill_type == "solid"
+    assert ws.cell(1, 2).fill.fill_type == "solid"
+    assert ws.cell(1, 3).fill.fill_type is None
+    assert ws.cell(2, 4).fill.fill_type is None
+
+
 def test_ev_sheet_header(wb):
     ws = wb["EV_sheet"]
     assert ws.cell(4, 1).value == "Row Labels"
-    assert ws.cell(4, 2).value == "Sum of EXTRINSIC_VALUE"
-    assert ws.cell(4, 3).value == "Dif of EXTRINSIC_VALUE"
+    assert ws.cell(4, 2).value == "Base_EV"
+    assert ws.cell(4, 3).value == "Final_EV"
+    assert ws.cell(4, 4).value == "Dif of EXTRINSIC_VALUE"
 
 
-def test_ev_sheet_right_scenario_name(wb):
+def test_ev_sheet_header_bottom_border_stops_at_last_scenario(wb):
     ws = wb["EV_sheet"]
-    # Row 5 = Final_EV (right scenario)
-    assert ws.cell(5, 1).value == "Final_EV"
+    assert ws.cell(4, 1).border.bottom.style == "medium"
+    assert ws.cell(4, 2).border.bottom.style == "medium"
+    assert ws.cell(4, 3).border.bottom.style == "medium"
+    assert ws.cell(4, 4).border.bottom.style is None
 
 
-def test_ev_sheet_right_scenario_sum(wb):
+def test_ev_sheet_year_row(wb):
     ws = wb["EV_sheet"]
-    assert ws.cell(5, 2).value == pytest.approx(5200.0)
-
-
-def test_ev_sheet_right_scenario_dif(wb):
-    ws = wb["EV_sheet"]
-    assert ws.cell(5, 3).value == pytest.approx(3200.0)
-
-
-def test_ev_sheet_right_year_row(wb):
-    ws = wb["EV_sheet"]
-    # Row 6 = year 2026 under Final_EV
-    assert ws.cell(6, 1).value == "2026"
-    assert ws.cell(6, 2).value == pytest.approx(5200.0)
-    assert ws.cell(6, 3).value == pytest.approx(3200.0)
-
-
-def test_ev_sheet_left_scenario_name(wb):
-    ws = wb["EV_sheet"]
-    # Row 7 = Base_EV (left scenario, no dif)
-    assert ws.cell(7, 1).value == "Base_EV"
-
-
-def test_ev_sheet_left_scenario_sum(wb):
-    ws = wb["EV_sheet"]
-    assert ws.cell(7, 2).value == pytest.approx(2000.0)
-
-
-def test_ev_sheet_left_scenario_no_dif(wb):
-    ws = wb["EV_sheet"]
-    # Dif column must be empty for the left scenario
-    assert ws.cell(7, 3).value is None
+    assert ws.cell(5, 1).value == "2026"
+    assert ws.cell(5, 2).value == pytest.approx(2000.0)
+    assert ws.cell(5, 3).value == pytest.approx(5200.0)
+    assert ws.cell(5, 4).value == pytest.approx(3200.0)
 
 
 def test_ev_sheet_grand_total(wb):
     ws = wb["EV_sheet"]
-    # Row 9 = Grand Total (right_total + left_total = 5200 + 2000 = 7200)
-    assert ws.cell(9, 1).value == "Grand Total"
-    assert ws.cell(9, 2).value == pytest.approx(7200.0)
+    assert ws.cell(6, 1).value == "Grand Total"
+    assert ws.cell(6, 2).value == pytest.approx(2000.0)
+    assert ws.cell(6, 3).value == pytest.approx(5200.0)
+    assert ws.cell(6, 4).value == pytest.approx(3200.0)
+
+
+def test_ev_sheet_grand_total_has_top_border(wb):
+    ws = wb["EV_sheet"]
+    for col in range(1, 5):
+        assert ws.cell(6, col).border.top.style == "medium"
 
 
 # Info and Data sheets 

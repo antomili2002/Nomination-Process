@@ -96,7 +96,6 @@ function YearlyDeltaSection({ tables, metric }: { tables: YearlyDeltaTable[]; me
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
       {tables.map((t, ti) => {
-        const grandTotal = t.left_total + t.right_total
         return (
           <div key={ti}>
             {/* Pair type badge */}
@@ -120,49 +119,32 @@ function YearlyDeltaSection({ tables, metric }: { tables: YearlyDeltaTable[]; me
                 <thead>
                   <tr>
                     <th style={{ ...TH, textAlign: 'left', minWidth: 260 }}>Row Labels</th>
-                    <th style={{ ...TH, minWidth: 140 }}>Sum of {metric}</th>
+                    <th style={{ ...TH, minWidth: 140 }}>{t.left_name}</th>
+                    <th style={{ ...TH, minWidth: 140 }}>{t.right_name}</th>
                     <th style={{ ...TH, minWidth: 140 }}>Dif of {metric}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {/* RIGHT scenario (the "new" one) — shows both Sum and Dif */}
-                  <tr style={{ background: '#ebf3fb' }}>
-                    <td style={{ ...TDL, paddingLeft: 10, fontWeight: 700, color: 'var(--clr-blue)' }}>{t.right_name}</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.right_total)}</td>
-                    <td style={{ ...TD, fontWeight: 700, color: t.delta_total < 0 ? '#c0392b' : 'var(--clr-blue)' }}>
-                      {fmtDif(t.delta_total).text}
-                    </td>
-                  </tr>
                   {t.rows.map((row, ri) => {
                     const { text, color } = fmtDif(row.delta)
                     return (
                       <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
                         <td style={{ ...TDL, paddingLeft: 24 }}>{row.year}</td>
+                        <td style={TD}>{fmtY(row.left_value)}</td>
                         <td style={TD}>{fmtY(row.right_value)}</td>
                         <td style={{ ...TD, color }}>{text}</td>
                       </tr>
                     )
                   })}
 
-                  {/* LEFT scenario (base) — Sum only, no Dif */}
-                  <tr style={{ background: '#f5f5f5', borderTop: '1px solid var(--clr-border)' }}>
-                    <td style={{ ...TDL, paddingLeft: 10, fontWeight: 700, color: 'var(--clr-text-muted)' }}>{t.left_name}</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.left_total)}</td>
-                    <td style={TD} />
-                  </tr>
-                  {t.rows.map((row, ri) => (
-                    <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
-                      <td style={{ ...TDL, paddingLeft: 24 }}>{row.year}</td>
-                      <td style={TD}>{fmtY(row.left_value)}</td>
-                      <td style={TD} />
-                    </tr>
-                  ))}
-
                   {/* Grand Total */}
                   <tr style={{ background: '#b8cce4', fontWeight: 700, borderTop: '2px solid #8ea9d8' }}>
                     <td style={{ ...TDL, paddingLeft: 10 }}>Grand Total</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(grandTotal)}</td>
-                    <td style={TD} />
+                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.left_total)}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.right_total)}</td>
+                    <td style={{ ...TD, fontWeight: 700, color: t.delta_total < 0 ? '#c0392b' : 'var(--clr-blue)' }}>
+                      {fmtDif(t.delta_total).text}
+                    </td>
                   </tr>
                 </tbody>
               </table>

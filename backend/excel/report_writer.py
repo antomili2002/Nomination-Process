@@ -23,6 +23,7 @@ _COLOR_BLUE = "C0E6F5"
 _FILL_BLUE = PatternFill(start_color=_COLOR_BLUE, fill_type="solid")
 
 _BORDER_BOTTOM_BLUE = Border(bottom=Side(style="medium", color=_COLOR_BLUE))
+_BORDER_TOP_BLUE = Border(top=Side(style="medium", color=_COLOR_BLUE))
 
 _NUM_FMT = "#,##0"
 _ALL_MONTHS = list(range(1, 13))  # 1..12
@@ -170,17 +171,12 @@ def _write_delta_sheet(
     ws.column_dimensions["A"].width = 35
     ws.column_dimensions["B"].width = 25
     ws.column_dimensions["C"].width = 25
+    ws.column_dimensions["D"].width = 25
 
     _w(ws, 1, 1, "OUTPUT_TYPE", fill=_FILL_BLUE);   _w(ws, 1, 2, output_type, fill=_FILL_BLUE)
-    _w(ws, 1, 3, None, fill=_FILL_BLUE)
     _w(ws, 2, 1, "MACHINE_NAME", fill=_FILL_BLUE);  _w(ws, 2, 2, "(All)", fill=_FILL_BLUE)
-    _w(ws, 2, 3, None, fill=_FILL_BLUE)
 
-    _w(ws, 4, 1, "Row Labels", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
-    _w(ws, 4, 2, f"Sum of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
-    _w(ws, 4, 3, f"Dif of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
-
-    row_num = 5
+    row_num = 4
 
     for dt in delta_tables:
         right_name: str   = dt["right_name"]
@@ -190,31 +186,24 @@ def _write_delta_sheet(
         delta_total: float = dt["delta_total"]
         dt_rows: list[dict] = dt["rows"]
 
-        _w(ws, row_num, 1, right_name, font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
-        _w(ws, row_num, 2, right_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
-        _w(ws, row_num, 3, delta_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
-        row_num += 1
-
-        for r in dt_rows:
-            _w(ws, row_num, 1, str(r["year"]), indent=1)
-            _w(ws, row_num, 2, r["right_value"], num_fmt=_NUM_FMT)
-            _w(ws, row_num, 3, r["delta"], num_fmt=_NUM_FMT)
-            row_num += 1
-
-        _w(ws, row_num, 1, left_name, font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
-        _w(ws, row_num, 2, left_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
-        _w(ws, row_num, 3, None, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 1, "Row Labels", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 2, left_name, font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 3, right_name, font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 4, f"Dif of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE)
         row_num += 1
 
         for r in dt_rows:
             _w(ws, row_num, 1, str(r["year"]), indent=1)
             _w(ws, row_num, 2, r["left_value"], num_fmt=_NUM_FMT)
+            _w(ws, row_num, 3, r["right_value"], num_fmt=_NUM_FMT)
+            _w(ws, row_num, 4, r["delta"], num_fmt=_NUM_FMT)
             row_num += 1
 
         # Add Grand Total per pair
-        _w(ws, row_num, 1, "Grand Total", font=_FONT_BOLD, fill=_FILL_BLUE)
-        _w(ws, row_num, 2, right_total + left_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT)
-        _w(ws, row_num, 3, None, fill=_FILL_BLUE)
+        _w(ws, row_num, 1, "Grand Total", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_TOP_BLUE)
+        _w(ws, row_num, 2, left_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT, border=_BORDER_TOP_BLUE)
+        _w(ws, row_num, 3, right_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT, border=_BORDER_TOP_BLUE)
+        _w(ws, row_num, 4, delta_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT, border=_BORDER_TOP_BLUE)
         row_num += 2
 
 
