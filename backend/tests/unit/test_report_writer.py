@@ -59,6 +59,14 @@ def simple_report_data() -> dict:
             "delta_total": 3200.0,
         }
     ]
+    ev_machine_deltas = [
+        {
+            **ev_deltas[0],
+            "rows": [
+                {"machine_name": "MACHINE_A", "year": 2026, "left_value": 2000.0, "right_value": 5200.0, "delta": 3200.0},
+            ],
+        }
+    ]
 
     iv_monthly = [
         {
@@ -97,6 +105,14 @@ def simple_report_data() -> dict:
             "delta_total": 3200.0,
         }
     ]
+    iv_machine_deltas = [
+        {
+            **iv_deltas[0],
+            "rows": [
+                {"machine_name": "MACHINE_A", "year": 2026, "left_value": 4000.0, "right_value": 7200.0, "delta": 3200.0},
+            ],
+        }
+    ]
 
     # PP uses the same IV-style scenarios
     pp_monthly = [
@@ -126,16 +142,27 @@ def simple_report_data() -> dict:
             "delta_total": 3200.0,
         }
     ]
+    pp_machine_deltas = [
+        {
+            **pp_deltas[0],
+            "rows": [
+                {"machine_name": "MACHINE_A", "year": 2026, "left_value": 4000.0, "right_value": 7200.0, "delta": 3200.0},
+            ],
+        }
+    ]
 
     return {
         "report_id": "test-id",
         "upload_id": "test-upload-id",
         "ev_monthly": ev_monthly,
         "ev_deltas":  ev_deltas,
+        "ev_machine_deltas": ev_machine_deltas,
         "iv_monthly": iv_monthly,
         "iv_deltas":  iv_deltas,
+        "iv_machine_deltas": iv_machine_deltas,
         "pp_monthly": pp_monthly,
         "pp_deltas":  pp_deltas,
+        "pp_machine_deltas": pp_machine_deltas,
     }
 
 
@@ -185,7 +212,8 @@ def test_returns_bytes(simple_report_data, simple_info_df, simple_data_df):
 def test_all_sheets_present(wb):
     names = wb.sheetnames
     for expected in ("EV_month", "EV_sheet", "IV_month", "IV_sheet",
-                     "PP_month", "PP_sheet", "Info", "Data"):
+                     "PP_month", "PP_sheet", "EV_machine_sheet",
+                     "IV_machine_sheet", "PP_machine_sheet", "Info", "Data"):
         assert expected in names, f"Sheet {expected!r} is missing"
 
 
@@ -353,6 +381,40 @@ def test_ev_sheet_grand_total_has_top_border(wb):
     ws = wb["EV_sheet"]
     for col in range(1, 5):
         assert ws.cell(6, col).border.top.style == "medium"
+
+
+def test_ev_machine_sheet_header(wb):
+    ws = wb["EV_machine_sheet"]
+    assert ws.cell(4, 1).value == "Row Labels"
+    assert ws.cell(4, 2).value == "Sum of EXTRINSIC_VALUE"
+    assert ws.cell(4, 3).value == "Dif of EXTRINSIC_VALUE"
+
+
+def test_ev_machine_sheet_scenario_machine_year_rows(wb):
+    ws = wb["EV_machine_sheet"]
+    assert ws.cell(5, 1).value == "Base_EV"
+    assert ws.cell(5, 2).value == pytest.approx(2000.0)
+    assert ws.cell(5, 3).value is None
+    assert ws.cell(6, 1).value == "MACHINE_A"
+    assert ws.cell(6, 2).value == pytest.approx(2000.0)
+    assert ws.cell(7, 1).value == "2026"
+    assert ws.cell(7, 2).value == pytest.approx(2000.0)
+    assert ws.cell(8, 1).value == "Final_EV"
+    assert ws.cell(8, 2).value == pytest.approx(5200.0)
+    assert ws.cell(8, 3).value == pytest.approx(3200.0)
+    assert ws.cell(9, 1).value == "MACHINE_A"
+    assert ws.cell(9, 2).value == pytest.approx(5200.0)
+    assert ws.cell(9, 3).value == pytest.approx(3200.0)
+    assert ws.cell(10, 1).value == "2026"
+    assert ws.cell(10, 2).value == pytest.approx(5200.0)
+    assert ws.cell(10, 3).value == pytest.approx(3200.0)
+
+
+def test_ev_machine_sheet_grand_total(wb):
+    ws = wb["EV_machine_sheet"]
+    assert ws.cell(11, 1).value == "Grand Total"
+    assert ws.cell(11, 2).value == pytest.approx(7200.0)
+    assert ws.cell(11, 3).value is None
 
 
 # Info and Data sheets 

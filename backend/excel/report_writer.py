@@ -39,10 +39,13 @@ def write_report(
 
     _write_monthly_sheet(wb, "EV_month", report_data["ev_monthly"], "EXTRINSIC_VALUE",      "EV")
     _write_delta_sheet  (wb, "EV_sheet", report_data["ev_deltas"],  "EXTRINSIC_VALUE",      "EV")
+    _write_machine_delta_sheet(wb, "EV_machine_sheet", report_data["ev_machine_deltas"], "EXTRINSIC_VALUE", "EV")
     _write_monthly_sheet(wb, "IV_month", report_data["iv_monthly"], "INTRINSIC_VALUE__CUR", "IV")
     _write_delta_sheet  (wb, "IV_sheet", report_data["iv_deltas"],  "INTRINSIC_VALUE__CUR", "IV")
+    _write_machine_delta_sheet(wb, "IV_machine_sheet", report_data["iv_machine_deltas"], "INTRINSIC_VALUE__CUR", "IV")
     _write_monthly_sheet(wb, "PP_month", report_data["pp_monthly"], "POWER_POS__GWH",       "IV")
     _write_delta_sheet  (wb, "PP_sheet", report_data["pp_deltas"],  "POWER_POS__GWH",       "IV")
+    _write_machine_delta_sheet(wb, "PP_machine_sheet", report_data["pp_machine_deltas"], "POWER_POS__GWH", "IV")
 
     _df_to_sheet(wb, "Info", info_df, write_header=False)
     _df_to_sheet(wb, "Data", data_df, write_header=True)
@@ -205,6 +208,94 @@ def _write_delta_sheet(
         _w(ws, row_num, 3, right_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT, border=_BORDER_TOP_BLUE)
         _w(ws, row_num, 4, delta_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT, border=_BORDER_TOP_BLUE)
         row_num += 2
+
+
+def _write_machine_delta_sheet(
+    wb: Workbook,
+    sheet_name: str,
+    delta_tables: list[dict],
+    metric_col: str,
+    output_type: str,
+) -> None:
+    ws = wb.create_sheet(sheet_name)
+    ws.sheet_view.showGridLines = False
+
+    ws.column_dimensions["A"].width = 35
+    ws.column_dimensions["B"].width = 25
+    ws.column_dimensions["C"].width = 25
+
+    _w(ws, 1, 1, "OUTPUT_TYPE", fill=_FILL_BLUE);   _w(ws, 1, 2, output_type, fill=_FILL_BLUE)
+    _w(ws, 2, 1, "MACHINE_NAME", fill=_FILL_BLUE);  _w(ws, 2, 2, "(All)", fill=_FILL_BLUE)
+
+    row_num = 4
+
+    for dt in delta_tables:
+        right_name: str = dt["right_name"]
+        left_name: str = dt["left_name"]
+        right_total: float = dt["right_total"]
+        left_total: float = dt["left_total"]
+        delta_total: float = dt["delta_total"]
+        dt_rows: list[dict] = dt["rows"]
+
+        _w(ws, row_num, 1, "Row Labels", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 2, f"Sum of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 3, f"Dif of {metric_col}", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_BOTTOM_BLUE)
+        row_num += 1
+
+        left_machine_totals = _machine_totals(dt_rows, "left_value")
+        right_machine_totals = _machine_totals(dt_rows, "right_value")
+        delta_machine_totals = _machine_totals(dt_rows, "delta")
+
+        _w(ws, row_num, 1, left_name, font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 2, left_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 3, None, font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
+        row_num += 1
+
+        for machine_name, rows in _rows_by_machine(dt_rows).items():
+            _w(ws, row_num, 1, machine_name, font=_FONT_BOLD, indent=1)
+            _w(ws, row_num, 2, left_machine_totals[machine_name], font=_FONT_BOLD, num_fmt=_NUM_FMT)
+            row_num += 1
+            for r in rows:
+                _w(ws, row_num, 1, str(r["year"]), indent=2)
+                _w(ws, row_num, 2, r["left_value"], num_fmt=_NUM_FMT)
+                row_num += 1
+
+        _w(ws, row_num, 1, right_name, font=_FONT_BOLD, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 2, right_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
+        _w(ws, row_num, 3, delta_total, font=_FONT_BOLD, num_fmt=_NUM_FMT, border=_BORDER_BOTTOM_BLUE)
+        row_num += 1
+
+        for machine_name, rows in _rows_by_machine(dt_rows).items():
+            _w(ws, row_num, 1, machine_name, font=_FONT_BOLD, indent=1)
+            _w(ws, row_num, 2, right_machine_totals[machine_name], font=_FONT_BOLD, num_fmt=_NUM_FMT)
+            _w(ws, row_num, 3, delta_machine_totals[machine_name], font=_FONT_BOLD, num_fmt=_NUM_FMT)
+            row_num += 1
+            for r in rows:
+                _w(ws, row_num, 1, str(r["year"]), indent=2)
+                _w(ws, row_num, 2, r["right_value"], num_fmt=_NUM_FMT)
+                _w(ws, row_num, 3, r["delta"], num_fmt=_NUM_FMT)
+                row_num += 1
+
+        # Add Grand Total per pair
+        _w(ws, row_num, 1, "Grand Total", font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_TOP_BLUE)
+        _w(ws, row_num, 2, left_total + right_total, font=_FONT_BOLD, fill=_FILL_BLUE, num_fmt=_NUM_FMT, border=_BORDER_TOP_BLUE)
+        _w(ws, row_num, 3, None, font=_FONT_BOLD, fill=_FILL_BLUE, border=_BORDER_TOP_BLUE)
+        row_num += 2
+
+
+def _rows_by_machine(rows: list[dict]) -> dict[str, list[dict]]:
+    grouped: dict[str, list[dict]] = {}
+    for r in sorted(rows, key=lambda row: (str(row["machine_name"]), int(row["year"]))):
+        grouped.setdefault(str(r["machine_name"]), []).append(r)
+    return grouped
+
+
+def _machine_totals(rows: list[dict], value_key: str) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    for r in rows:
+        machine_name = str(r["machine_name"])
+        totals[machine_name] = totals.get(machine_name, 0.0) + float(r[value_key])
+    return totals
 
 
 def _safe(v) -> object:

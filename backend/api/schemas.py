@@ -96,12 +96,34 @@ class YearlyDeltaTable(BaseModel):
     delta_total: float               # right_total − left_total
 
 
+class MachineYearlyDeltaRow(BaseModel):
+    machine_name: str
+    year: int
+    left_value: float
+    right_value: float
+    delta: float
+
+
+class MachineYearlyDeltaTable(BaseModel):
+    left_name:   str
+    right_name:  str
+    pair_type:   str
+    step_number: Optional[int] = None
+    rows:        list[MachineYearlyDeltaRow]
+    left_total:  float
+    right_total: float
+    delta_total: float
+
+
 class GenerateReportResponse(BaseModel):
     report_id: str
     upload_id: str
     ev_monthly: list[PivotTable]
     ev_deltas:  list[YearlyDeltaTable]
+    ev_machine_deltas: list[MachineYearlyDeltaTable]
     iv_monthly: list[PivotTable]
     iv_deltas:  list[YearlyDeltaTable]
+    iv_machine_deltas: list[MachineYearlyDeltaTable]
     pp_monthly: list[PivotTable]
     pp_deltas:  list[YearlyDeltaTable]
+    pp_machine_deltas: list[MachineYearlyDeltaTable]

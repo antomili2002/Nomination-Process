@@ -1,5 +1,3 @@
-import React from 'react'
-
 export interface PivotRow {
   year: number
   tariff: string

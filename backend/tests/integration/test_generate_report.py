@@ -172,6 +172,9 @@ class TestGenerateReport:
         assert len(data["ev_deltas"]) == 1
         assert len(data["iv_deltas"]) == 1
         assert len(data["pp_deltas"]) == 1
+        assert len(data["ev_machine_deltas"]) == 1
+        assert len(data["iv_machine_deltas"]) == 1
+        assert len(data["pp_machine_deltas"]) == 1
 
     def test_delta_tables_count_three_step_chain(self, uploaded):
         resp = client.post("/reports/generate", json={
@@ -208,6 +211,18 @@ class TestGenerateReport:
         rows = resp.json()["ev_deltas"][0]["rows"]
         assert len(rows) == 1
         assert rows[0]["year"] == 2026
+        assert "machine_name" not in rows[0]
+
+    def test_all_delta_metrics_include_machine_rows(self, uploaded):
+        resp = client.post("/reports/generate", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        data = resp.json()
+        assert data["ev_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
+        assert data["iv_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
+        assert data["pp_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
 
     def test_machine_filter_with_known_machine(self, uploaded):
         """Filtering by the only machine in the fixture yields the same totals.

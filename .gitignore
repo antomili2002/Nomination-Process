@@ -3,14 +3,17 @@
 *.log
 *.tmp
 node_modules/
+.superpowers/
 
 # Ignore pycache and other Python artifacts
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 tmp/
 backend/tmp/
 *.xlsx
+.tmp*
 
 .superpowers/

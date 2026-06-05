@@ -24,7 +24,7 @@ from backend.processing.monthly_output import aggregate_monthly
 from backend.processing.pivot import to_pivot_table
 from backend.processing.readers import read_workbook_sheets
 from backend.processing.scenario_extraction import extract_scenarios
-from backend.processing.yearly_delta_output import compute_yearly_delta
+from backend.processing.yearly_delta_output import compute_machine_yearly_delta, compute_yearly_delta
 from backend.storage.temp_files import get_upload_path
 
 
@@ -103,6 +103,24 @@ def _yearly_delta_tables(
         left_df = _agg(data_df, [p.left_name], metric, selected_machines)
         right_df = _agg(data_df, [p.right_name], metric, selected_machines)
         d = compute_yearly_delta(left_df, right_df, metric, p.left_name, p.right_name)
+        tables.append({
+            **d,
+            "pair_type": p.pair_type,
+            "step_number": p.step_number,
+        })
+    return tables
+
+
+def _machine_yearly_delta_tables(
+    data_df: pd.DataFrame,
+    pairs: list[DeltaPair],
+    metric: str,
+    selected_machines: Optional[list[str]],
+) -> list[dict]:
+    """Machine/year aggregate delta tables (for generate and export)."""
+    tables = []
+    for p in pairs:
+        d = compute_machine_yearly_delta(data_df, metric, p.left_name, p.right_name, selected_machines)
         tables.append({
             **d,
             "pair_type": p.pair_type,
@@ -193,8 +211,11 @@ def generate_report(
         "upload_id":  upload_id,
         "ev_monthly": _monthly_pivot_tables(data_df, ev_chain, EV_COL, index_to_name, sel),
         "ev_deltas":  _yearly_delta_tables(data_df, ev_pairs, EV_COL, sel),
+        "ev_machine_deltas": _machine_yearly_delta_tables(data_df, ev_pairs, EV_COL, sel),
         "iv_monthly": _monthly_pivot_tables(data_df, iv_chain, IV_COL, index_to_name, sel),
         "iv_deltas":  _yearly_delta_tables(data_df, iv_pairs, IV_COL, sel),
+        "iv_machine_deltas": _machine_yearly_delta_tables(data_df, iv_pairs, IV_COL, sel),
         "pp_monthly": _monthly_pivot_tables(data_df, iv_chain, POWER_POS_COL, index_to_name, sel),
         "pp_deltas":  _yearly_delta_tables(data_df, iv_pairs, POWER_POS_COL, sel),
+        "pp_machine_deltas": _machine_yearly_delta_tables(data_df, iv_pairs, POWER_POS_COL, sel),
     }

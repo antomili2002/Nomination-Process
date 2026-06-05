@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { PivotTable } from './PivotTable'
 import type { PivotTableData } from './PivotTable'
 

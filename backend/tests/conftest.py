@@ -97,8 +97,10 @@ def sample_workbook_bytes() -> bytes:
 
 
 @pytest.fixture(scope="session")
-def sample_workbook_path(tmp_path_factory, sample_workbook_bytes) -> Path:
-    p = tmp_path_factory.mktemp("fixtures") / "sample_input.xlsx"
+def sample_workbook_path(sample_workbook_bytes) -> Path:
+    fixture_dir = Path("backend/tmp/test_fixtures")
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    p = fixture_dir / "sample_input.xlsx"
     p.write_bytes(sample_workbook_bytes)
     return p
 

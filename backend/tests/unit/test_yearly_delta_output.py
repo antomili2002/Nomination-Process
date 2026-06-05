@@ -1,144 +1,112 @@
-"""Unit tests for backend/processing/yearly_delta_output.py
-
-Fixture data recap (from conftest.py):
-  Each scenario: 1 year (2026) × 2 tariffs × 2 months = 4 rows per scenario.
-  EV values per row: Base_EV=500, Outage_EV=700, Final_EV=1300
-
-  After aggregate_monthly the shape is (SCENARIO, TARIFF, YEAR, MONTH).
-  compute_yearly_delta then sums over TARIFF and MONTH, so per-year totals are:
-
-    Base_EV   → 500  × 4 =  2 000
-    Outage_EV → 700  × 4 =  2 800
-    Final_EV  → 1300 × 4 =  5 200
-
-  Expected deltas (right − left):
-    Base   → Outage : 2 800 −  2 000 =    800
-    Outage → Final  : 5 200 −  2 800 =  2 400
-    Base   → Final  : 5 200 −  2 000 =  3 200   (= 800 + 2400 ✓)
-"""
+"""Unit tests for yearly and machine-yearly delta output."""
+import pandas as pd
 import pytest
 
-from backend.core.constants import EV_COL
-from backend.processing.cleaning import clean_data
+from backend.core.constants import (
+    EV_COL,
+    MACHINE_NAME_COL,
+    MONTH_COL,
+    SCENARIO_NAME_COL,
+    TARIFF_COL,
+    YEAR_COL,
+)
 from backend.processing.monthly_output import aggregate_monthly
-from backend.processing.yearly_delta_output import compute_yearly_delta
+from backend.processing.yearly_delta_output import (
+    compute_machine_yearly_delta,
+    compute_yearly_delta,
+)
 
 
-@pytest.fixture(scope="module")
-def clean_df(data_df):
-    return clean_data(data_df)
+def _source_df() -> pd.DataFrame:
+    rows = []
+    values = {
+        ("Base_EV", "MACHINE_A", 2026): 10.0,
+        ("Base_EV", "MACHINE_A", 2027): 20.0,
+        ("Final_EV", "MACHINE_A", 2026): 15.0,
+        ("Final_EV", "MACHINE_A", 2027): 25.0,
+        ("Base_EV", "MACHINE_B", 2026): 100.0,
+        ("Final_EV", "MACHINE_B", 2026): 80.0,
+    }
+
+    for (scenario, machine, year), value in values.items():
+        for month in [5, 6]:
+            for tariff in ["peak", "offpeak"]:
+                rows.append({
+                    SCENARIO_NAME_COL: scenario,
+                    MACHINE_NAME_COL: machine,
+                    YEAR_COL: year,
+                    MONTH_COL: month,
+                    TARIFF_COL: tariff,
+                    EV_COL: value,
+                })
+    return pd.DataFrame(rows)
 
 
-@pytest.fixture(scope="module")
-def base_monthly(clean_df):
-    return aggregate_monthly(clean_df, ["Base_EV"], EV_COL)
+def test_yearly_delta_keeps_original_year_only_shape():
+    df = _source_df()
+    left = aggregate_monthly(df, ["Base_EV"], EV_COL)
+    right = aggregate_monthly(df, ["Final_EV"], EV_COL)
+    result = compute_yearly_delta(left, right, EV_COL, "Base_EV", "Final_EV")
+
+    assert set(result["rows"][0]) == {"year", "left_value", "right_value", "delta"}
+    assert result["rows"] == [
+        {"year": 2026, "left_value": 440.0, "right_value": 380.0, "delta": -60.0},
+        {"year": 2027, "left_value": 80.0, "right_value": 100.0, "delta": 20.0},
+    ]
+    assert result["left_total"] == pytest.approx(520.0)
+    assert result["right_total"] == pytest.approx(480.0)
+    assert result["delta_total"] == pytest.approx(-40.0)
 
 
-@pytest.fixture(scope="module")
-def outage_monthly(clean_df):
-    return aggregate_monthly(clean_df, ["Outage_EV"], EV_COL)
+def test_machine_yearly_delta_returns_machine_and_year_rows():
+    result = compute_machine_yearly_delta(_source_df(), EV_COL, "Base_EV", "Final_EV")
+    assert result["rows"] == [
+        {
+            "machine_name": "MACHINE_A",
+            "year": 2026,
+            "left_value": 40.0,
+            "right_value": 60.0,
+            "delta": 20.0,
+        },
+        {
+            "machine_name": "MACHINE_A",
+            "year": 2027,
+            "left_value": 80.0,
+            "right_value": 100.0,
+            "delta": 20.0,
+        },
+        {
+            "machine_name": "MACHINE_B",
+            "year": 2026,
+            "left_value": 400.0,
+            "right_value": 320.0,
+            "delta": -80.0,
+        },
+    ]
 
 
-@pytest.fixture(scope="module")
-def final_monthly(clean_df):
-    return aggregate_monthly(clean_df, ["Final_EV"], EV_COL)
+def test_machine_yearly_delta_machine_filter_limits_rows_and_totals():
+    result = compute_machine_yearly_delta(
+        _source_df(),
+        EV_COL,
+        "Base_EV",
+        "Final_EV",
+        selected_machines=["MACHINE_A"],
+    )
+    assert [row["machine_name"] for row in result["rows"]] == ["MACHINE_A", "MACHINE_A"]
+    assert result["left_total"] == pytest.approx(120.0)
+    assert result["right_total"] == pytest.approx(160.0)
+    assert result["delta_total"] == pytest.approx(40.0)
 
 
-# Return shape
-def test_returns_expected_top_level_keys(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert set(result) == {"left_name", "right_name", "rows", "left_total", "right_total", "delta_total"}
-
-
-def test_each_row_has_required_keys(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    for row in result["rows"]:
-        assert set(row) == {"year", "left_value", "right_value", "delta"}
-
-
-def test_names_are_preserved(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert result["left_name"] == "Base_EV"
-    assert result["right_name"] == "Final_EV"
-
-
-# Correct aggregation — Base → Final
-def test_left_total_base_ev(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert result["left_total"] == pytest.approx(2000.0)
-
-
-def test_right_total_final_ev(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert result["right_total"] == pytest.approx(5200.0)
-
-
-def test_delta_total_base_to_final(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert result["delta_total"] == pytest.approx(3200.0)
-
-
-def test_single_year_in_rows(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert len(result["rows"]) == 1
-
-
-def test_row_year_is_2026(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert result["rows"][0]["year"] == 2026
-
-
-def test_row_values_match_totals(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    row = result["rows"][0]
-    assert row["left_value"] == pytest.approx(2000.0)
-    assert row["right_value"] == pytest.approx(5200.0)
-    assert row["delta"] == pytest.approx(3200.0)
-
-# Correct aggregation — Base → Outage
-def test_step_delta_base_to_outage(base_monthly, outage_monthly):
-    result = compute_yearly_delta(base_monthly, outage_monthly, EV_COL, "Base_EV", "Outage_EV")
-    assert result["delta_total"] == pytest.approx(800.0)
-
-
-def test_step_delta_outage_to_final(outage_monthly, final_monthly):
-    result = compute_yearly_delta(outage_monthly, final_monthly, EV_COL, "Outage_EV", "Final_EV")
-    assert result["delta_total"] == pytest.approx(2400.0)
-
-
-# Consistency invariants
-def test_delta_equals_right_minus_left_per_row(base_monthly, outage_monthly):
-    result = compute_yearly_delta(base_monthly, outage_monthly, EV_COL, "Base_EV", "Outage_EV")
-    for row in result["rows"]:
-        assert row["delta"] == pytest.approx(row["right_value"] - row["left_value"])
-
-
-def test_delta_total_equals_right_minus_left_total(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert result["delta_total"] == pytest.approx(result["right_total"] - result["left_total"])
-
-
-def test_step_deltas_sum_to_cumulative(base_monthly, outage_monthly, final_monthly):
-    step1 = compute_yearly_delta(base_monthly, outage_monthly, EV_COL, "Base_EV", "Outage_EV")
-    step2 = compute_yearly_delta(outage_monthly, final_monthly, EV_COL, "Outage_EV", "Final_EV")
-    cumul = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert step1["delta_total"] + step2["delta_total"] == pytest.approx(cumul["delta_total"])
-
-
-def test_rows_sorted_by_year(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    years = [r["year"] for r in result["rows"]]
-    assert years == sorted(years)
-
-
-def test_row_year_is_integer(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    for row in result["rows"]:
-        assert isinstance(row["year"], int)
-
-
-def test_totals_are_floats(base_monthly, final_monthly):
-    result = compute_yearly_delta(base_monthly, final_monthly, EV_COL, "Base_EV", "Final_EV")
-    assert isinstance(result["left_total"], float)
-    assert isinstance(result["right_total"], float)
-    assert isinstance(result["delta_total"], float)
+def test_machine_yearly_delta_missing_right_machine_year_treated_as_zero():
+    df = _source_df()
+    df = df[~(
+        (df[SCENARIO_NAME_COL] == "Final_EV")
+        & (df[MACHINE_NAME_COL] == "MACHINE_B")
+    )]
+    result = compute_machine_yearly_delta(df, EV_COL, "Base_EV", "Final_EV")
+    machine_b = [r for r in result["rows"] if r["machine_name"] == "MACHINE_B"][0]
+    assert machine_b["left_value"] == pytest.approx(400.0)
+    assert machine_b["right_value"] == pytest.approx(0.0)
+    assert machine_b["delta"] == pytest.approx(-400.0)
