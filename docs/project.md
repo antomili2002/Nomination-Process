@@ -40,6 +40,13 @@ app is small enough for `useState` / prop-passing.
 
 ## Architecture
 
+The report pipeline now uses a metric-driven v2 structure. Metric definitions
+live in `backend/domain/report_metrics.py`; reusable report construction lives
+in `backend/processing/report_builder.py`; frontend section metadata lives in
+`frontend/src/reportMetrics.ts`. See
+[`report-metrics-v2.md`](report-metrics-v2.md) for the current metric model and
+the checklist for adding future reports.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │ Browser (React + Vite :5173)                                        │
@@ -117,8 +124,12 @@ POST /reports/generate
   catch domain exceptions via `_to_http()`, and map to response schemas.
   No business logic in routes.
 - **Services coordinate.** `services/report_service.py` orchestrates calls to
-  multiple processing functions and returns plain Python dicts.
+  multiple processing functions and returns plain Python dicts. Metric-specific
+  behavior belongs in `domain/report_metrics.py` and `processing/report_builder.py`,
+  not in the service layer.
 - **No magic strings.** All column names live in `core/constants.py`.
+  Report field names, chain ownership, and Excel sheet prefixes live in
+  `domain/report_metrics.py`.
 - **Domain exceptions.** Raise `InvalidWorkbookError`, `InvalidChainError`,
   or `ScenarioExtractionError` from processing functions — never `HTTPException`.
   The controller converts them.
@@ -153,6 +164,8 @@ backend/tests/
     test_cleaning.py
     test_delta_output.py
     test_monthly_output.py
+    test_report_builder.py
+    test_report_metrics.py
     test_readers.py
     test_scenario_extraction.py
     test_yearly_delta_output.py
@@ -185,6 +198,10 @@ The shared fixture builds a deterministic in-memory `.xlsx` workbook:
 | Base_EV | EXTRINSIC_VALUE | 500 |
 | Outage_EV | EXTRINSIC_VALUE | 700 |
 | Final_EV | EXTRINSIC_VALUE | 1 300 |
+| Base_IV | IV_INCL_HEAT_COSTS | 900 |
+| Final_IV | IV_INCL_HEAT_COSTS | 1 700 |
+| Base_IV | HEAT_PRODUCTION__GWH | 10 |
+| Final_IV | HEAT_PRODUCTION__GWH | 18 |
 
 Each scenario has 1 machine × 2 tariffs × 2 months = 4 rows (all in year 2026).
 Yearly totals: `value × 4` (e.g. Base_EV = 2 000, Final_EV = 5 200).
@@ -238,6 +255,13 @@ background task. Use a **function-scoped** fixture (default scope) for
 3. Add unit tests in `backend/tests/unit/test_my_feature.py`.
 4. Expose via the service layer (`report_service.py`) if the feature is part
    of report generation, or create a new service file.
+
+### Backend: new report metric
+
+Use the v2 metric checklist in [`report-metrics-v2.md`](report-metrics-v2.md).
+In short: add the column constant, add a `ReportMetric`, expose explicit API
+fields, map the frontend `ReportData`, and cover the metric in unit and
+integration tests. Do not add another hard-coded block to `report_service.py`.
 
 ### Backend: new endpoint
 

@@ -16,6 +16,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from backend.domain.report_metrics import REPORT_METRICS
+
 _FONT_DEFAULT = Font(name="Aptos Narrow", size=11)
 _FONT_BOLD = Font(name="Aptos Narrow", size=11, bold=True)
 
@@ -37,15 +39,28 @@ def write_report(
     wb = Workbook()
     del wb["Sheet"]
 
-    _write_monthly_sheet(wb, "EV_month", report_data["ev_monthly"], "EXTRINSIC_VALUE",      "EV")
-    _write_delta_sheet  (wb, "EV_sheet", report_data["ev_deltas"],  "EXTRINSIC_VALUE",      "EV")
-    _write_machine_delta_sheet(wb, "EV_machine_sheet", report_data["ev_machine_deltas"], "EXTRINSIC_VALUE", "EV")
-    _write_monthly_sheet(wb, "IV_month", report_data["iv_monthly"], "INTRINSIC_VALUE__CUR", "IV")
-    _write_delta_sheet  (wb, "IV_sheet", report_data["iv_deltas"],  "INTRINSIC_VALUE__CUR", "IV")
-    _write_machine_delta_sheet(wb, "IV_machine_sheet", report_data["iv_machine_deltas"], "INTRINSIC_VALUE__CUR", "IV")
-    _write_monthly_sheet(wb, "PP_month", report_data["pp_monthly"], "POWER_POS__GWH",       "IV")
-    _write_delta_sheet  (wb, "PP_sheet", report_data["pp_deltas"],  "POWER_POS__GWH",       "IV")
-    _write_machine_delta_sheet(wb, "PP_machine_sheet", report_data["pp_machine_deltas"], "POWER_POS__GWH", "IV")
+    for metric in REPORT_METRICS:
+        _write_monthly_sheet(
+            wb,
+            f"{metric.excel_prefix}_month",
+            report_data[metric.monthly_field],
+            metric.column,
+            metric.output_type,
+        )
+        _write_delta_sheet(
+            wb,
+            f"{metric.excel_prefix}_sheet",
+            report_data[metric.deltas_field],
+            metric.column,
+            metric.output_type,
+        )
+        _write_machine_delta_sheet(
+            wb,
+            f"{metric.excel_prefix}_machine_sheet",
+            report_data[metric.machine_deltas_field],
+            metric.column,
+            metric.output_type,
+        )
 
     _df_to_sheet(wb, "Info", info_df, write_header=False)
     _df_to_sheet(wb, "Data", data_df, write_header=True)

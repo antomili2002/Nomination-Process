@@ -143,6 +143,12 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         ppMonthly: payload.pp_monthly,
         ppDeltas:  payload.pp_deltas,
         ppMachineDeltas: payload.pp_machine_deltas,
+        ivHeatMonthly: payload.iv_heat_monthly,
+        ivHeatDeltas:  payload.iv_heat_deltas,
+        ivHeatMachineDeltas: payload.iv_heat_machine_deltas,
+        heatProdMonthly: payload.heat_prod_monthly,
+        heatProdDeltas:  payload.heat_prod_deltas,
+        heatProdMachineDeltas: payload.heat_prod_machine_deltas,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Report generation failed.')
@@ -208,7 +214,9 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         {(['iv', 'ev'] as const).map(chain => {
           const items = chains[chain]
           const label = chain === 'iv' ? 'IV Scenario Chain' : 'EV Scenario Chain'
-          const desc  = chain === 'iv' ? 'INTRINSIC_VALUE + POWER_POS' : 'EXTRINSIC_VALUE'
+          const desc  = chain === 'iv'
+            ? 'INTRINSIC_VALUE, POWER_POS, IV_HEAT_COST, HEAT_PRODUCTION_GWH'
+            : 'EXTRINSIC_VALUE'
           const deltas = computeDeltaPairs(items, scenarios)
           const zoneActive = dropTarget?.chain === chain
           const nameOf = (idx: number) =>

@@ -128,6 +128,36 @@ class TestPreviewChain:
         })
         assert resp.status_code == 404
 
+
+# POST /reports/data-preview
+class TestDataPreview:
+    def test_new_iv_heat_dashboards_are_returned(self, uploaded_module):
+        resp = client.post("/reports/data-preview", json={
+            "upload_id": uploaded_module["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["iv_heat_monthly"]) == 2
+        assert len(data["iv_heat_deltas"]) == 1
+        assert len(data["heat_prod_monthly"]) == 2
+        assert len(data["heat_prod_deltas"]) == 1
+        assert "heat_cost_monthly" not in data
+        assert "heat_cost_deltas" not in data
+
+    def test_new_dashboard_preview_values_use_iv_chain(self, uploaded_module):
+        resp = client.post("/reports/data-preview", json={
+            "upload_id": uploaded_module["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        data = resp.json()
+        iv_heat_delta = data["iv_heat_deltas"][0]["rows"][0]["values"]
+        heat_prod_delta = data["heat_prod_deltas"][0]["rows"][0]["values"]
+        assert iv_heat_delta == [800.0, 800.0]
+        assert heat_prod_delta == [8.0, 8.0]
+
 # POST /reports/generate
 class TestGenerateReport:
     def test_returns_200(self, uploaded):
@@ -160,6 +190,9 @@ class TestGenerateReport:
         assert len(data["ev_monthly"]) == 2
         assert len(data["iv_monthly"]) == 2
         assert len(data["pp_monthly"]) == 2
+        assert len(data["iv_heat_monthly"]) == 2
+        assert len(data["heat_prod_monthly"]) == 2
+        assert "heat_cost_monthly" not in data
 
     def test_delta_tables_count_simple_chain(self, uploaded):
         resp = client.post("/reports/generate", json={
@@ -172,9 +205,15 @@ class TestGenerateReport:
         assert len(data["ev_deltas"]) == 1
         assert len(data["iv_deltas"]) == 1
         assert len(data["pp_deltas"]) == 1
+        assert len(data["iv_heat_deltas"]) == 1
+        assert len(data["heat_prod_deltas"]) == 1
         assert len(data["ev_machine_deltas"]) == 1
         assert len(data["iv_machine_deltas"]) == 1
         assert len(data["pp_machine_deltas"]) == 1
+        assert len(data["iv_heat_machine_deltas"]) == 1
+        assert len(data["heat_prod_machine_deltas"]) == 1
+        assert "heat_cost_deltas" not in data
+        assert "heat_cost_machine_deltas" not in data
 
     def test_delta_tables_count_three_step_chain(self, uploaded):
         resp = client.post("/reports/generate", json={
@@ -185,6 +224,20 @@ class TestGenerateReport:
         data = resp.json()
         # 3-element chain → 2 steps + 1 cumulative = 3 delta pairs
         assert len(data["ev_deltas"]) == 3
+        assert len(data["iv_heat_deltas"]) == 3
+        assert len(data["heat_prod_deltas"]) == 3
+
+    def test_new_iv_heat_metrics_use_iv_chain_values(self, uploaded):
+        resp = client.post("/reports/generate", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        data = resp.json()
+        assert data["iv_heat_deltas"][0]["left_total"] == pytest.approx(3600.0)
+        assert data["iv_heat_deltas"][0]["right_total"] == pytest.approx(6800.0)
+        assert data["iv_heat_deltas"][0]["delta_total"] == pytest.approx(3200.0)
+        assert data["heat_prod_deltas"][0]["delta_total"] == pytest.approx(32.0)
 
     def test_ev_delta_yearly_values(self, uploaded):
         """Verify the yearly aggregate numbers match known fixture values.
@@ -223,6 +276,8 @@ class TestGenerateReport:
         assert data["ev_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
         assert data["iv_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
         assert data["pp_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
+        assert data["iv_heat_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
+        assert data["heat_prod_machine_deltas"][0]["rows"][0]["machine_name"] == "MACHINE_A"
 
     def test_machine_filter_with_known_machine(self, uploaded):
         """Filtering by the only machine in the fixture yields the same totals.
@@ -319,6 +374,11 @@ class TestExportReport:
         import openpyxl
         wb = openpyxl.load_workbook(_io.BytesIO(resp.content))
         assert "EV_month" in wb.sheetnames
+        assert "IV_Heat_month" in wb.sheetnames
+        assert "Heat_Prod_sheet" in wb.sheetnames
+        assert "Heat_Cost_month" not in wb.sheetnames
+        assert "Heat_Cost_sheet" not in wb.sheetnames
+        assert "Heat_Cost_machine_sheet" not in wb.sheetnames
         assert "Info" in wb.sheetnames
         assert "Data" in wb.sheetnames
 

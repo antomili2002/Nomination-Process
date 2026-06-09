@@ -3,9 +3,17 @@ import pandas as pd
 import pytest
 
 from backend.core.constants import (
-    EV_COL, IV_COL, MACHINE_NAME_COL, MONTH_COL,
-    OUTPUT_TYPE_COL, POWER_POS_COL, SCENARIO_NAME_COL,
-    TARIFF_COL, YEAR_COL,
+    EV_COL,
+    HEAT_PRODUCTION_COL,
+    IV_COL,
+    IV_INCL_HEAT_COSTS_COL,
+    MACHINE_NAME_COL,
+    MONTH_COL,
+    OUTPUT_TYPE_COL,
+    POWER_POS_COL,
+    SCENARIO_NAME_COL,
+    TARIFF_COL,
+    YEAR_COL,
 )
 from backend.core.exceptions import InvalidWorkbookError
 from backend.processing.cleaning import clean_data
@@ -23,6 +31,8 @@ def _minimal_row(**overrides) -> dict:
         POWER_POS_COL: "500",
         IV_COL: "1000",
         EV_COL: "500",
+        IV_INCL_HEAT_COSTS_COL: "900",
+        HEAT_PRODUCTION_COL: "10",
     }
     base.update(overrides)
     return base
@@ -53,6 +63,16 @@ def test_metric_columns_are_float():
     result = clean_data(df)
     assert result.loc[0, POWER_POS_COL] == pytest.approx(123.45)
     assert result.loc[0, EV_COL] == pytest.approx(999.9)
+
+
+def test_new_iv_heat_metric_columns_are_float():
+    df = _df(_minimal_row(**{
+        IV_INCL_HEAT_COSTS_COL: "901.25",
+        HEAT_PRODUCTION_COL: "11.5",
+    }))
+    result = clean_data(df)
+    assert result.loc[0, IV_INCL_HEAT_COSTS_COL] == pytest.approx(901.25)
+    assert result.loc[0, HEAT_PRODUCTION_COL] == pytest.approx(11.5)
 
 
 def test_decimal_comma_values_are_parsed():

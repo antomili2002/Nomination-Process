@@ -1,420 +1,26 @@
-﻿import React, { useEffect, useRef, useState } from 'react'
-import type { MachineYearlyDeltaTable, ReportData, YearlyDeltaTable } from '../App'
+﻿import { useEffect, useRef, useState } from 'react'
+import { Download, FilePlus2, SlidersHorizontal } from 'lucide-react'
+import type { ReportData } from '../types/report'
 import type { PivotTableData } from '../components/PivotTable'
+import {
+  getMachineYearlyDeltas,
+  getMonthlyTables,
+  getSection,
+  getSectionCount,
+  getYearlyDeltas,
+  REPORT_GROUPS,
+  SECTIONS,
+  type SectionId,
+} from '../reportMetrics'
+import {
+  ExcelPivotSection,
+  MachineYearlyDeltaSection,
+  YearlyDeltaSection,
+} from '../components/report/ReportSections'
 
 interface Props {
   reportData: ReportData
   onReset: () => void
-}
-
-type SectionId =
-  | 'ev-monthly' | 'ev-deltas' | 'ev-machine-deltas'
-  | 'iv-monthly' | 'iv-deltas' | 'iv-machine-deltas'
-  | 'pp-monthly' | 'pp-deltas' | 'pp-machine-deltas'
-
-interface Section {
-  id: SectionId
-  label: string
-  metric: string
-  group: 'EV' | 'IV' | 'Power Position'
-  tableType: 'monthly' | 'yearlyDelta' | 'machineYearlyDelta'
-}
-
-const SECTIONS: Section[] = [
-  { id: 'ev-monthly', label: 'Monthly',  metric: 'EXTRINSIC_VALUE',       group: 'EV',             tableType: 'monthly' },
-  { id: 'ev-deltas',  label: 'Yearly Deltas', metric: 'EXTRINSIC_VALUE',  group: 'EV',             tableType: 'yearlyDelta' },
-  { id: 'ev-machine-deltas', label: 'Machine Yearly Deltas', metric: 'EXTRINSIC_VALUE', group: 'EV', tableType: 'machineYearlyDelta' },
-  { id: 'iv-monthly', label: 'Monthly',  metric: 'INTRINSIC_VALUE__CUR',  group: 'IV',             tableType: 'monthly' },
-  { id: 'iv-deltas',  label: 'Yearly Deltas', metric: 'INTRINSIC_VALUE__CUR', group: 'IV',          tableType: 'yearlyDelta' },
-  { id: 'iv-machine-deltas', label: 'Machine Yearly Deltas', metric: 'INTRINSIC_VALUE__CUR', group: 'IV', tableType: 'machineYearlyDelta' },
-  { id: 'pp-monthly', label: 'Monthly',  metric: 'POWER_POS__GWH',        group: 'Power Position', tableType: 'monthly' },
-  { id: 'pp-deltas',  label: 'Yearly Deltas', metric: 'POWER_POS__GWH',   group: 'Power Position', tableType: 'yearlyDelta' },
-  { id: 'pp-machine-deltas', label: 'Machine Yearly Deltas', metric: 'POWER_POS__GWH', group: 'Power Position', tableType: 'machineYearlyDelta' },
-]
-
-function getMonthlyTables(d: ReportData, id: SectionId): PivotTableData[] {
-  switch (id) {
-    case 'ev-monthly': return d.evMonthly
-    case 'iv-monthly': return d.ivMonthly
-    case 'pp-monthly': return d.ppMonthly
-    default: return []
-  }
-}
-
-function getYearlyDeltas(d: ReportData, id: SectionId): YearlyDeltaTable[] {
-  switch (id) {
-    case 'ev-deltas': return d.evDeltas
-    case 'iv-deltas': return d.ivDeltas
-    case 'pp-deltas': return d.ppDeltas
-    default: return []
-  }
-}
-
-function getMachineYearlyDeltas(d: ReportData, id: SectionId): MachineYearlyDeltaTable[] {
-  switch (id) {
-    case 'ev-machine-deltas': return d.evMachineDeltas
-    case 'iv-machine-deltas': return d.ivMachineDeltas
-    case 'pp-machine-deltas': return d.ppMachineDeltas
-    default: return []
-  }
-}
-
-function getSectionCount(d: ReportData, id: SectionId): number {
-  const sec = SECTIONS.find(s => s.id === id)!
-  if (sec.tableType === 'monthly') return getMonthlyTables(d, id).length
-  if (sec.tableType === 'yearlyDelta') return getYearlyDeltas(d, id).length
-  return getMachineYearlyDeltas(d, id).length
-}
-
-function fmtN(v: number): string {
-  if (Math.abs(v) < 0.005) return '\u2014'
-  return Math.round(v).toLocaleString('en-GB')
-}
-
-// Used by ExcelPivotSection (monthly tables, rounded integers)
-function fmtDelta(v: number): { text: string; color?: string } {
-  if (Math.abs(v) < 0.005) return { text: '\u2014' }
-  const abs = Math.round(Math.abs(v)).toLocaleString('en-GB')
-  if (v < 0) return { text: `(${abs})`, color: '#c0392b' }
-  return { text: abs, color: 'var(--clr-blue)' }
-}
-
-function fmtY(v: number): string {
-  if (Math.abs(v) < 0.0005) return '\u2014'
-  return Math.round(v).toLocaleString('en-GB')
-}
-
-function fmtDif(v: number): { text: string; color?: string } {
-  if (Math.abs(v) < 0.0005) return { text: '' }
-  const s = Math.round(Math.abs(v)).toLocaleString('en-GB')
-  if (v < 0) return { text: `-${s}`, color: '#c0392b' }
-  return { text: s, color: 'var(--clr-blue)' }
-}
-
-function YearlyDeltaSection({ tables, metric }: { tables: YearlyDeltaTable[]; metric: string }) {
-  if (tables.length === 0)
-    return <p style={{ color: 'var(--clr-text-muted)', fontStyle: 'italic' }}>No data available.</p>
-
-  const TH: React.CSSProperties = {
-    padding: '5px 10px', fontWeight: 700, fontSize: 'var(--text-xs)',
-    background: '#d9e1f2', borderBottom: '2px solid #8ea9d8',
-    whiteSpace: 'nowrap', borderRight: '1px solid #b8c9e0',
-  }
-  const TD: React.CSSProperties = {
-    padding: '3px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-    fontSize: 'var(--text-xs)', borderRight: '1px solid var(--clr-border)', whiteSpace: 'nowrap',
-  }
-  const TDL: React.CSSProperties = { ...TD, textAlign: 'left', fontVariantNumeric: 'normal' }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
-      {tables.map((t, ti) => (
-        <div key={ti}>
-          {t.pair_type && (
-            <div style={{ marginBottom: 'var(--sp-2)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-              <span style={{
-                fontSize: 9, padding: '2px 8px', borderRadius: 3,
-                background: t.pair_type === 'cumulative' ? 'var(--clr-blue)' : '#6c757d', color: '#fff',
-                fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-              }}>
-                {t.pair_type === 'cumulative' ? 'Cumulative' : `Step ${t.step_number}`}
-              </span>
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)' }}>
-                {t.right_name} vs {t.left_name}
-              </span>
-            </div>
-          )}
-
-          <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
-            <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...TH, textAlign: 'left', minWidth: 260 }}>Row Labels</th>
-                  <th style={{ ...TH, minWidth: 140 }}>{t.left_name}</th>
-                  <th style={{ ...TH, minWidth: 140 }}>{t.right_name}</th>
-                  <th style={{ ...TH, minWidth: 140 }}>Dif of {metric}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {t.rows.map((row, ri) => {
-                  const { text, color } = fmtDif(row.delta)
-                  return (
-                    <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
-                      <td style={{ ...TDL, paddingLeft: 24 }}>{row.year}</td>
-                      <td style={TD}>{fmtY(row.left_value)}</td>
-                      <td style={TD}>{fmtY(row.right_value)}</td>
-                      <td style={{ ...TD, color }}>{text}</td>
-                    </tr>
-                  )
-                })}
-                <tr style={{ background: '#b8cce4', fontWeight: 700, borderTop: '2px solid #8ea9d8' }}>
-                  <td style={{ ...TDL, paddingLeft: 10 }}>Grand Total</td>
-                  <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.left_total)}</td>
-                  <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.right_total)}</td>
-                  <td style={{ ...TD, fontWeight: 700, color: t.delta_total < 0 ? '#c0392b' : 'var(--clr-blue)' }}>
-                    {fmtDif(t.delta_total).text}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function MachineYearlyDeltaSection({ tables, metric }: { tables: MachineYearlyDeltaTable[]; metric: string }) {
-  if (tables.length === 0)
-    return <p style={{ color: 'var(--clr-text-muted)', fontStyle: 'italic' }}>No data available.</p>
-
-  const TH: React.CSSProperties = {
-    padding: '5px 10px', fontWeight: 700, fontSize: 'var(--text-xs)',
-    background: '#d9e1f2', borderBottom: '2px solid #8ea9d8',
-    whiteSpace: 'nowrap', borderRight: '1px solid #b8c9e0',
-  }
-  const TD: React.CSSProperties = {
-    padding: '3px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-    fontSize: 'var(--text-xs)', borderRight: '1px solid var(--clr-border)', whiteSpace: 'nowrap',
-  }
-  const TDL: React.CSSProperties = { ...TD, textAlign: 'left', fontVariantNumeric: 'normal' }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
-      {tables.map((t, ti) => {
-        const machineNames = [...new Set(t.rows.map(r => r.machine_name))].sort()
-        const machineTotals = machineNames.map(machineName => {
-          const rows = t.rows.filter(r => r.machine_name === machineName)
-          return {
-            machineName,
-            rows,
-            leftTotal: rows.reduce((sum, r) => sum + r.left_value, 0),
-            rightTotal: rows.reduce((sum, r) => sum + r.right_value, 0),
-            deltaTotal: rows.reduce((sum, r) => sum + r.delta, 0),
-          }
-        })
-
-        return (
-          <div key={ti}>
-            {/* Pair type badge */}
-            {t.pair_type && (
-              <div style={{ marginBottom: 'var(--sp-2)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-                <span style={{
-                  fontSize: 9, padding: '2px 8px', borderRadius: 3,
-                  background: t.pair_type === 'cumulative' ? 'var(--clr-blue)' : '#6c757d', color: '#fff',
-                  fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                }}>
-                  {t.pair_type === 'cumulative' ? 'Cumulative' : `Step ${t.step_number}`}
-                </span>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)' }}>
-                  {t.right_name} vs {t.left_name}
-                </span>
-              </div>
-            )}
-
-            <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
-              <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...TH, textAlign: 'left', minWidth: 260 }}>Row Labels</th>
-                    <th style={{ ...TH, minWidth: 140 }}>{t.left_name}</th>
-                    <th style={{ ...TH, minWidth: 140 }}>{t.right_name}</th>
-                    <th style={{ ...TH, minWidth: 140 }}>Dif of {metric}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {machineTotals.map(({ machineName, rows, leftTotal, rightTotal, deltaTotal }, mi) => {
-                    const machineDif = fmtDif(deltaTotal)
-                    return (
-                      <React.Fragment key={machineName}>
-                        <tr style={{ background: mi % 2 === 0 ? '#f3f7fb' : '#eef4fa', fontWeight: 700 }}>
-                          <td style={{ ...TDL, paddingLeft: 10 }}>{machineName}</td>
-                          <td style={{ ...TD, fontWeight: 700 }}>{fmtY(leftTotal)}</td>
-                          <td style={{ ...TD, fontWeight: 700 }}>{fmtY(rightTotal)}</td>
-                          <td style={{ ...TD, fontWeight: 700, color: machineDif.color }}>{machineDif.text}</td>
-                        </tr>
-                        {rows.map((row, ri) => {
-                          const { text, color } = fmtDif(row.delta)
-                          return (
-                            <tr key={`${machineName}-${row.year}`} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
-                              <td style={{ ...TDL, paddingLeft: 28 }}>{row.year}</td>
-                              <td style={TD}>{fmtY(row.left_value)}</td>
-                              <td style={TD}>{fmtY(row.right_value)}</td>
-                              <td style={{ ...TD, color }}>{text}</td>
-                            </tr>
-                          )
-                        })}
-                      </React.Fragment>
-                    )
-                  })}
-
-                  {/* Grand Total */}
-                  <tr style={{ background: '#b8cce4', fontWeight: 700, borderTop: '2px solid #8ea9d8' }}>
-                    <td style={{ ...TDL, paddingLeft: 10 }}>Grand Total</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.left_total)}</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.right_total)}</td>
-                    <td style={{ ...TD, fontWeight: 700, color: t.delta_total < 0 ? '#c0392b' : 'var(--clr-blue)' }}>
-                      {fmtDif(t.delta_total).text}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function ExcelPivotSection({ tables, isDelta }: { tables: PivotTableData[]; isDelta: boolean }) {
-  if (tables.length === 0) return <p style={{ color: 'var(--clr-text-muted)', fontStyle: 'italic' }}>No data available.</p>
-
-  const months = tables[0].months
-  const colTotals = months.map((_, mi) =>
-    tables.flatMap(t => t.rows).reduce((s, r) => s + (r.values[mi] ?? 0), 0)
-  )
-  const overallTotal = colTotals.reduce((s, v) => s + v, 0)
-
-  const TH: React.CSSProperties = {
-    padding: '5px 10px', textAlign: 'right', fontWeight: 700, fontSize: 'var(--text-xs)',
-    background: '#d9e1f2', borderBottom: '2px solid #8ea9d8', whiteSpace: 'nowrap',
-    borderRight: '1px solid #b8c9e0',
-  }
-  const TD: React.CSSProperties = {
-    padding: '3px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-    fontSize: 'var(--text-xs)', borderRight: '1px solid var(--clr-border)', whiteSpace: 'nowrap',
-  }
-  const TDL: React.CSSProperties = { ...TD, textAlign: 'left', minWidth: 60, fontVariantNumeric: 'normal' }
-
-  function valTD(v: number, bold = false, bg?: string): React.ReactNode {
-    if (isDelta) {
-      const { text, color } = fmtDelta(v)
-      return <td style={{ ...TD, color, fontWeight: bold ? 700 : undefined, background: bg }}>{text}</td>
-    }
-    return <td style={{ ...TD, fontWeight: bold ? 700 : undefined, background: bg }}>{fmtN(v)}</td>
-  }
-
-  return (
-    <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
-      <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
-        <thead>
-          <tr>
-            <th style={{ ...TH, textAlign: 'left', minWidth: 56, borderRight: '1px solid #b8c9e0' }}>Year</th>
-            <th style={{ ...TH, textAlign: 'left', minWidth: 72, borderRight: '1px solid #b8c9e0' }}>Tariff</th>
-            {months.map(m => (
-              <th key={m} style={{ ...TH, minWidth: 72 }}>{m}</th>
-            ))}
-            <th style={{ ...TH, minWidth: 90, borderLeft: '2px solid #8ea9d8' }}>Grand Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tables.map((table, ti) => {
-            const years = [...new Set(table.rows.map(r => r.year))].sort()
-            const scMonthTotals = months.map((_, mi) =>
-              table.rows.reduce((s, r) => s + (r.values[mi] ?? 0), 0)
-            )
-            const scGrandTotal = scMonthTotals.reduce((s, v) => s + v, 0)
-
-            return (
-              <React.Fragment key={ti}>
-                <tr>
-                  <td colSpan={months.length + 3} style={{
-                    padding: '5px 10px', fontWeight: 700, fontSize: 'var(--text-xs)',
-                    background: isDelta ? '#fdecea' : '#ebf3fb',
-                    borderTop: ti > 0 ? '2px solid var(--clr-border)' : undefined,
-                    color: isDelta ? '#c0392b' : 'var(--clr-blue)',
-                  }}>
-                    {table.pair_type && (
-                      <span style={{
-                        display: 'inline-block', fontSize: 9, padding: '1px 6px', borderRadius: 3, marginRight: 8,
-                        background: table.pair_type === 'cumulative' ? 'var(--clr-blue)' : '#6c757d', color: '#fff',
-                      }}>
-                        {table.pair_type === 'cumulative' ? 'Cumulative' : `Step ${table.step_number}`}
-                      </span>
-                    )}
-                    {table.title}
-                  </td>
-                </tr>
-
-                {years.map(year => {
-                  const yearRows = table.rows.filter(r => r.year === year)
-                  const yearMTotals = months.map((_, mi) =>
-                    yearRows.reduce((s, r) => s + (r.values[mi] ?? 0), 0)
-                  )
-                  const yearTotal = yearMTotals.reduce((s, v) => s + v, 0)
-
-                  return (
-                    <React.Fragment key={year}>
-                      {yearRows.map((row, ri) => (
-                        <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
-                          <td style={{ ...TDL, paddingLeft: 16, borderRight: '1px solid var(--clr-border)' }}>
-                            {ri === 0 ? <strong>{year}</strong> : ''}
-                          </td>
-                          <td style={{ ...TDL, paddingLeft: 24, textTransform: 'capitalize' }}>{row.tariff}</td>
-                          {row.values.map((v, mi) => {
-                            if (isDelta) {
-                              const { text, color } = fmtDelta(v)
-                              return <td key={mi} style={{ ...TD, color }}>{text}</td>
-                            }
-                            return <td key={mi} style={TD}>{fmtN(v)}</td>
-                          })}
-                          {valTD(row.values.reduce((s, v) => s + v, 0), false, '#edf2f7')}
-                        </tr>
-                      ))}
-
-                      {yearRows.length > 1 && (
-                        <tr style={{ background: '#edf2f7', fontWeight: 600 }}>
-                          <td style={{ ...TDL, paddingLeft: 16, color: 'var(--clr-text-muted)', fontSize: 10 }}>{year} Total</td>
-                          <td style={TDL} />
-                          {yearMTotals.map((v, i) => {
-                            if (isDelta) {
-                              const { text, color } = fmtDelta(v)
-                              return <td key={i} style={{ ...TD, color, fontWeight: 600 }}>{text}</td>
-                            }
-                            return <td key={i} style={{ ...TD, fontWeight: 600 }}>{fmtN(v)}</td>
-                          })}
-                          {valTD(yearTotal, true, '#dce3ed')}
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  )
-                })}
-
-                <tr style={{ background: '#dce3ed', fontWeight: 700, borderBottom: '1px solid #b8c9e0' }}>
-                  <td colSpan={2} style={{ ...TDL, paddingLeft: 10, color: isDelta ? '#c0392b' : 'var(--clr-blue)' }}>
-                    {table.title} Total
-                  </td>
-                  {scMonthTotals.map((v, i) => {
-                    if (isDelta) {
-                      const { text, color } = fmtDelta(v)
-                      return <td key={i} style={{ ...TD, color, fontWeight: 700 }}>{text}</td>
-                    }
-                    return <td key={i} style={{ ...TD, fontWeight: 700 }}>{fmtN(v)}</td>
-                  })}
-                  {valTD(scGrandTotal, true)}
-                </tr>
-              </React.Fragment>
-            )
-          })}
-
-          {tables.length > 1 && (
-            <tr style={{ background: '#b8cce4', fontWeight: 700, borderTop: '2px solid #8ea9d8' }}>
-              <td colSpan={2} style={{ ...TDL, paddingLeft: 10 }}>Grand Total</td>
-              {colTotals.map((v, i) => {
-                if (isDelta) {
-                  const { text, color } = fmtDelta(v)
-                  return <td key={i} style={{ ...TD, color, fontWeight: 700 }}>{text}</td>
-                }
-                return <td key={i} style={{ ...TD, fontWeight: 700 }}>{fmtN(v)}</td>
-              })}
-              {valTD(overallTotal, true)}
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
 }
 
 // Cache helpers 
@@ -440,23 +46,28 @@ function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
     ppMonthly: p.pp_monthly as PivotTableData[],
     ppDeltas:  p.pp_deltas  as ReportData['ppDeltas'],
     ppMachineDeltas: p.pp_machine_deltas as ReportData['ppMachineDeltas'],
+    ivHeatMonthly: p.iv_heat_monthly as PivotTableData[],
+    ivHeatDeltas:  p.iv_heat_deltas as ReportData['ivHeatDeltas'],
+    ivHeatMachineDeltas: p.iv_heat_machine_deltas as ReportData['ivHeatMachineDeltas'],
+    heatProdMonthly: p.heat_prod_monthly as PivotTableData[],
+    heatProdDeltas:  p.heat_prod_deltas as ReportData['heatProdDeltas'],
+    heatProdMachineDeltas: p.heat_prod_machine_deltas as ReportData['heatProdMachineDeltas'],
   }
 }
 
 export function ResultPage({ reportData, onReset }: Props) {
   const { uploadId, ivChain, evChain, machines } = reportData
 
-  // ── Section navigation ───────────────────────────────────────────────────
+  // -- Section navigation ---------------------------------------------------
   const [activeId, setActiveId] = useState<SectionId>('ev-monthly')
-  const activeSection = SECTIONS.find(s => s.id === activeId)!
-  const groups = ['EV', 'IV', 'Power Position'] as const
+  const activeSection = getSection(activeId)
 
-  // ── Machine filter + cache ───────────────────────────────────────────────
+  // -- Machine filter + cache -----------------------------------------------
   // activeData is what gets rendered; initialised from the passed-in reportData.
   const [activeData, setActiveData]     = useState<ReportData>(reportData)
   const [activeKey, setActiveKey]       = useState<string>(() => cacheKey(reportData.selectedMachines, machines))
 
-  // Cache: cacheKey → ReportData.  Pre-seed with the initial result.
+  // Cache: cacheKey to ReportData. Pre-seed with the initial result.
   const [cache, setCache] = useState<Map<string, ReportData>>(() => {
     const m = new Map<string, ReportData>()
     m.set(cacheKey(reportData.selectedMachines, machines), reportData)
@@ -466,7 +77,7 @@ export function ResultPage({ reportData, onReset }: Props) {
   const [recomputing, setRecomputing]   = useState(false)
   const [recomputeError, setRecomputeError] = useState<string | null>(null)
 
-  // ── Download state ───────────────────────────────────────────────────────
+  // -- Download state -------------------------------------------------------
   const [downloading, setDownloading] = useState(false)
 
   // Machine popover
@@ -575,7 +186,7 @@ export function ResultPage({ reportData, onReset }: Props) {
 
   return (
     <div style={{ display: 'flex', gap: 0, minHeight: 'calc(100vh - 120px)', alignItems: 'flex-start' }}>
-      {/* ── Sidebar ── */}
+      {/* -- Sidebar -- */}
       <aside style={{
         width: 220, flexShrink: 0,
         borderRight: '1px solid var(--clr-border)', alignSelf: 'stretch',
@@ -588,7 +199,7 @@ export function ResultPage({ reportData, onReset }: Props) {
           </p>
         </div>
 
-        {groups.map(group => {
+        {REPORT_GROUPS.map(group => {
           const groupSections = SECTIONS.filter(s => s.group === group)
           return (
             <div key={group} style={{ borderBottom: '1px solid var(--clr-border)' }}>
@@ -631,12 +242,12 @@ export function ResultPage({ reportData, onReset }: Props) {
 
         <div style={{ padding: 'var(--sp-4)' }}>
           <button className="btn btn--ghost btn--sm" onClick={onReset} style={{ width: '100%' }}>
-            ← New Report
+            <FilePlus2 size={14} aria-hidden="true" /> New Report
           </button>
         </div>
       </aside>
 
-      {/* ── Main content ── */}
+      {/* -- Main content -- */}
       <div style={{ flex: 1, minWidth: 0, padding: 'var(--sp-6)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
 
         {/* Header row */}
@@ -672,7 +283,7 @@ export function ResultPage({ reportData, onReset }: Props) {
                   fontWeight: isFiltered ? 700 : undefined,
                 }}
               >
-                ⊙ {isFiltered ? `Machines (${activeMachineCount}/${machines.length})` : 'Machines (All)'}
+                <SlidersHorizontal size={14} aria-hidden="true" /> {isFiltered ? `Machines (${activeMachineCount}/${machines.length})` : 'Machines (All)'}
               </button>
 
               {showMenu && (
@@ -753,7 +364,7 @@ export function ResultPage({ reportData, onReset }: Props) {
             >
               {downloading
                 ? <><span className="spinner spinner--sm" aria-hidden="true" />Downloading…</>
-                : <>↓ Download Excel</>
+                : <><Download size={14} aria-hidden="true" /> Download Excel</>
               }
             </button>
           </div>
@@ -787,3 +398,7 @@ export function ResultPage({ reportData, onReset }: Props) {
     </div>
   )
 }
+
+
+
+

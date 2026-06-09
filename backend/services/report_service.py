@@ -16,15 +16,16 @@ from typing import Optional
 
 import pandas as pd
 
-from backend.core.constants import EV_COL, IV_COL, MACHINE_NAME_COL, POWER_POS_COL
+from backend.domain.report_metrics import REPORT_METRICS, ReportMetric
 from backend.processing.chain_builder import DeltaPair, build_delta_pairs, validate_chain
 from backend.processing.cleaning import clean_data
-from backend.processing.delta_output import compute_delta
-from backend.processing.monthly_output import aggregate_monthly
-from backend.processing.pivot import to_pivot_table
 from backend.processing.readers import read_workbook_sheets
+from backend.processing.report_builder import (
+    build_available_machines,
+    build_metric_preview,
+    build_metric_report,
+)
 from backend.processing.scenario_extraction import extract_scenarios
-from backend.processing.yearly_delta_output import compute_machine_yearly_delta, compute_yearly_delta
 from backend.storage.temp_files import get_upload_path
 
 
@@ -43,90 +44,16 @@ def _build_index_map(info_df: pd.DataFrame) -> dict[int, str]:
     return dict(zip(scenario_df["index"].tolist(), scenario_df["scenario_name"].tolist()))
 
 
-def _agg(
-    data_df: pd.DataFrame,
-    scenario_names: list[str],
-    metric: str,
-    selected_machines: Optional[list[str]],
-) -> pd.DataFrame:
-    return aggregate_monthly(data_df, scenario_names, metric, selected_machines=selected_machines)
+def _chain_for_metric(metric: ReportMetric, iv_chain: list[int], ev_chain: list[int]) -> list[int]:
+    return ev_chain if metric.chain_kind == "ev" else iv_chain
 
 
-def _monthly_pivot_tables(
-    data_df: pd.DataFrame,
-    chain_indices: list[int],
-    metric: str,
-    index_to_name: dict[int, str],
-    selected_machines: Optional[list[str]],
-) -> list[dict]:
-    """Return pivot-table dicts for the base and final scenario of a chain."""
-    tables = []
-    for idx in [chain_indices[0], chain_indices[-1]]:
-        name = index_to_name[idx]
-        raw = to_pivot_table(_agg(data_df, [name], metric, selected_machines), metric)
-        tables.append({"title": name, "months": raw["months"], "rows": raw["rows"]})
-    return tables
-
-
-def _delta_pivot_tables(
-    data_df: pd.DataFrame,
-    pairs: list[DeltaPair],
-    metric: str,
-    selected_machines: Optional[list[str]],
-) -> list[dict]:
-    """Monthly-delta pivot tables (for data-preview only)."""
-    tables = []
-    for p in pairs:
-        left_df = _agg(data_df, [p.left_name], metric, selected_machines)
-        right_df = _agg(data_df, [p.right_name], metric, selected_machines)
-        delta_df = compute_delta(left_df, right_df, metric, p.left_name, p.right_name)
-        raw = to_pivot_table(delta_df, metric)
-        tables.append({
-            "title": f"{p.left_name} \u2192 {p.right_name}",
-            "pair_type": p.pair_type,
-            "step_number": p.step_number,
-            "months": raw["months"],
-            "rows": raw["rows"],
-        })
-    return tables
-
-
-def _yearly_delta_tables(
-    data_df: pd.DataFrame,
-    pairs: list[DeltaPair],
-    metric: str,
-    selected_machines: Optional[list[str]],
-) -> list[dict]:
-    """Yearly-aggregate delta tables (for the generate endpoint)."""
-    tables = []
-    for p in pairs:
-        left_df = _agg(data_df, [p.left_name], metric, selected_machines)
-        right_df = _agg(data_df, [p.right_name], metric, selected_machines)
-        d = compute_yearly_delta(left_df, right_df, metric, p.left_name, p.right_name)
-        tables.append({
-            **d,
-            "pair_type": p.pair_type,
-            "step_number": p.step_number,
-        })
-    return tables
-
-
-def _machine_yearly_delta_tables(
-    data_df: pd.DataFrame,
-    pairs: list[DeltaPair],
-    metric: str,
-    selected_machines: Optional[list[str]],
-) -> list[dict]:
-    """Machine/year aggregate delta tables (for generate and export)."""
-    tables = []
-    for p in pairs:
-        d = compute_machine_yearly_delta(data_df, metric, p.left_name, p.right_name, selected_machines)
-        tables.append({
-            **d,
-            "pair_type": p.pair_type,
-            "step_number": p.step_number,
-        })
-    return tables
+def _pairs_for_metric(
+    metric: ReportMetric,
+    iv_pairs: list[DeltaPair],
+    ev_pairs: list[DeltaPair],
+) -> list[DeltaPair]:
+    return ev_pairs if metric.chain_kind == "ev" else iv_pairs
 
 
 # Public service functions
@@ -170,17 +97,17 @@ def preview_data(
 
     iv_pairs = build_delta_pairs(iv_chain, index_to_name)
     ev_pairs = build_delta_pairs(ev_chain, index_to_name)
-    sel = selected_machines
-    machines: list[str] = sorted(data_df[MACHINE_NAME_COL].dropna().unique().tolist())
-
-    return {
-        "available_machines": machines,
-        "ev_monthly": _monthly_pivot_tables(data_df, ev_chain, EV_COL, index_to_name, sel),
-        "ev_deltas":  _delta_pivot_tables(data_df, ev_pairs, EV_COL, sel),
-        "iv_monthly": _monthly_pivot_tables(data_df, iv_chain, IV_COL, index_to_name, sel),
-        "iv_deltas":  _delta_pivot_tables(data_df, iv_pairs, IV_COL, sel),
-        "pp_monthly": _monthly_pivot_tables(data_df, iv_chain, POWER_POS_COL, index_to_name, sel),
-    }
+    result: dict = {"available_machines": build_available_machines(data_df)}
+    for metric in REPORT_METRICS:
+        result.update(build_metric_preview(
+            data_df=data_df,
+            chain_indices=_chain_for_metric(metric, iv_chain, ev_chain),
+            pairs=_pairs_for_metric(metric, iv_pairs, ev_pairs),
+            metric=metric,
+            index_to_name=index_to_name,
+            selected_machines=selected_machines,
+        ))
+    return result
 
 
 def generate_report(
@@ -204,18 +131,17 @@ def generate_report(
 
     iv_pairs = build_delta_pairs(iv_chain, index_to_name)
     ev_pairs = build_delta_pairs(ev_chain, index_to_name)
-    sel = selected_machines
-
-    return {
+    result: dict = {
         "report_id":  str(uuid.uuid4()),
         "upload_id":  upload_id,
-        "ev_monthly": _monthly_pivot_tables(data_df, ev_chain, EV_COL, index_to_name, sel),
-        "ev_deltas":  _yearly_delta_tables(data_df, ev_pairs, EV_COL, sel),
-        "ev_machine_deltas": _machine_yearly_delta_tables(data_df, ev_pairs, EV_COL, sel),
-        "iv_monthly": _monthly_pivot_tables(data_df, iv_chain, IV_COL, index_to_name, sel),
-        "iv_deltas":  _yearly_delta_tables(data_df, iv_pairs, IV_COL, sel),
-        "iv_machine_deltas": _machine_yearly_delta_tables(data_df, iv_pairs, IV_COL, sel),
-        "pp_monthly": _monthly_pivot_tables(data_df, iv_chain, POWER_POS_COL, index_to_name, sel),
-        "pp_deltas":  _yearly_delta_tables(data_df, iv_pairs, POWER_POS_COL, sel),
-        "pp_machine_deltas": _machine_yearly_delta_tables(data_df, iv_pairs, POWER_POS_COL, sel),
     }
+    for metric in REPORT_METRICS:
+        result.update(build_metric_report(
+            data_df=data_df,
+            chain_indices=_chain_for_metric(metric, iv_chain, ev_chain),
+            pairs=_pairs_for_metric(metric, iv_pairs, ev_pairs),
+            metric=metric,
+            index_to_name=index_to_name,
+            selected_machines=selected_machines,
+        ))
+    return result

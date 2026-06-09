@@ -151,6 +151,77 @@ def simple_report_data() -> dict:
         }
     ]
 
+    iv_heat_monthly = [
+        {
+            "title": "Base_IV",
+            "pair_type": None,
+            "step_number": None,
+            "months": [5, 6],
+            "rows": [
+                {"year": 2026, "tariff": "offpeak", "values": [900.0, 900.0]},
+                {"year": 2026, "tariff": "peak",    "values": [900.0, 900.0]},
+            ],
+        },
+        {
+            "title": "Final_IV",
+            "pair_type": None,
+            "step_number": None,
+            "months": [5, 6],
+            "rows": [
+                {"year": 2026, "tariff": "offpeak", "values": [1700.0, 1700.0]},
+                {"year": 2026, "tariff": "peak",    "values": [1700.0, 1700.0]},
+            ],
+        },
+    ]
+    iv_heat_deltas = [
+        {
+            "left_name": "Base_IV",
+            "right_name": "Final_IV",
+            "pair_type": "cumulative",
+            "step_number": None,
+            "rows": [
+                {"year": 2026, "left_value": 3600.0, "right_value": 6800.0, "delta": 3200.0},
+            ],
+            "left_total": 3600.0,
+            "right_total": 6800.0,
+            "delta_total": 3200.0,
+        }
+    ]
+    iv_heat_machine_deltas = [
+        {
+            **iv_heat_deltas[0],
+            "rows": [
+                {"machine_name": "MACHINE_A", "year": 2026, "left_value": 3600.0, "right_value": 6800.0, "delta": 3200.0},
+            ],
+        }
+    ]
+
+    heat_prod_monthly = [
+        {**iv_heat_monthly[0], "rows": [
+            {"year": 2026, "tariff": "offpeak", "values": [10.0, 10.0]},
+            {"year": 2026, "tariff": "peak", "values": [10.0, 10.0]},
+        ]},
+        {**iv_heat_monthly[1], "rows": [
+            {"year": 2026, "tariff": "offpeak", "values": [18.0, 18.0]},
+            {"year": 2026, "tariff": "peak", "values": [18.0, 18.0]},
+        ]},
+    ]
+    heat_prod_deltas = [
+        {
+            **iv_heat_deltas[0],
+            "rows": [{"year": 2026, "left_value": 40.0, "right_value": 72.0, "delta": 32.0}],
+            "left_total": 40.0,
+            "right_total": 72.0,
+            "delta_total": 32.0,
+        }
+    ]
+    heat_prod_machine_deltas = [
+        {
+            **heat_prod_deltas[0],
+            "rows": [{"machine_name": "MACHINE_A", "year": 2026, "left_value": 40.0, "right_value": 72.0, "delta": 32.0}],
+        }
+    ]
+
     return {
         "report_id": "test-id",
         "upload_id": "test-upload-id",
@@ -163,6 +234,12 @@ def simple_report_data() -> dict:
         "pp_monthly": pp_monthly,
         "pp_deltas":  pp_deltas,
         "pp_machine_deltas": pp_machine_deltas,
+        "iv_heat_monthly": iv_heat_monthly,
+        "iv_heat_deltas": iv_heat_deltas,
+        "iv_heat_machine_deltas": iv_heat_machine_deltas,
+        "heat_prod_monthly": heat_prod_monthly,
+        "heat_prod_deltas": heat_prod_deltas,
+        "heat_prod_machine_deltas": heat_prod_machine_deltas,
     }
 
 
@@ -192,6 +269,8 @@ def simple_data_df() -> pd.DataFrame:
         "POWER_POS__GWH":       [500.0, 1300.0],
         "INTRINSIC_VALUE__CUR": [500.0, 1300.0],
         "EXTRINSIC_VALUE":      [500.0, 1300.0],
+        "IV_INCL_HEAT_COSTS":    [400.0, 700.0],
+        "HEAT_PRODUCTION__GWH":  [10.0, 20.0],
     })
 
 
@@ -213,8 +292,17 @@ def test_all_sheets_present(wb):
     names = wb.sheetnames
     for expected in ("EV_month", "EV_sheet", "IV_month", "IV_sheet",
                      "PP_month", "PP_sheet", "EV_machine_sheet",
-                     "IV_machine_sheet", "PP_machine_sheet", "Info", "Data"):
+                     "IV_machine_sheet", "PP_machine_sheet",
+                     "IV_Heat_month", "IV_Heat_sheet", "IV_Heat_machine_sheet",
+                     "Heat_Prod_month", "Heat_Prod_sheet", "Heat_Prod_machine_sheet",
+                     "Info", "Data"):
         assert expected in names, f"Sheet {expected!r} is missing"
+
+
+def test_heat_cost_sheets_not_present(wb):
+    assert "Heat_Cost_month" not in wb.sheetnames
+    assert "Heat_Cost_sheet" not in wb.sheetnames
+    assert "Heat_Cost_machine_sheet" not in wb.sheetnames
 
 
 def test_output_sheets_before_info(wb):

@@ -9,9 +9,17 @@ MACHINE_NAME_COL  = "MACHINE_NAME"
 POWER_POS_COL     = "POWER_POS__GWH"
 IV_COL            = "INTRINSIC_VALUE__CUR"
 EV_COL            = "EXTRINSIC_VALUE"
+IV_INCL_HEAT_COSTS_COL = "IV_INCL_HEAT_COSTS"
+HEAT_PRODUCTION_COL = "HEAT_PRODUCTION__GWH"
 
 # Metric columns aggregated in reports
-METRIC_COLS = [POWER_POS_COL, IV_COL, EV_COL]
+METRIC_COLS = [
+    POWER_POS_COL,
+    IV_COL,
+    EV_COL,
+    IV_INCL_HEAT_COSTS_COL,
+    HEAT_PRODUCTION_COL,
+]
 
 # Minimum columns required in the Data sheet
 REQUIRED_DATA_COLS = [
@@ -25,6 +33,8 @@ REQUIRED_DATA_COLS = [
     POWER_POS_COL,
     IV_COL,
     EV_COL,
+    IV_INCL_HEAT_COSTS_COL,
+    HEAT_PRODUCTION_COL,
 ]
 
 # Value in the first column of the Info sheet header row

@@ -76,6 +76,11 @@ class DataPreviewResponse(BaseModel):
     iv_monthly: list[PivotTable]   # base + final IV scenarios
     iv_deltas:  list[PivotTable]   # all IV delta pairs
     pp_monthly: list[PivotTable]   # power position (same IV scenarios)
+    pp_deltas:  list[PivotTable]
+    iv_heat_monthly: list[PivotTable]
+    iv_heat_deltas:  list[PivotTable]
+    heat_prod_monthly: list[PivotTable]
+    heat_prod_deltas:  list[PivotTable]
 
 
 class YearlyDeltaRow(BaseModel):
@@ -127,3 +132,9 @@ class GenerateReportResponse(BaseModel):
     pp_monthly: list[PivotTable]
     pp_deltas:  list[YearlyDeltaTable]
     pp_machine_deltas: list[MachineYearlyDeltaTable]
+    iv_heat_monthly: list[PivotTable]
+    iv_heat_deltas:  list[YearlyDeltaTable]
+    iv_heat_machine_deltas: list[MachineYearlyDeltaTable]
+    heat_prod_monthly: list[PivotTable]
+    heat_prod_deltas:  list[YearlyDeltaTable]
+    heat_prod_machine_deltas: list[MachineYearlyDeltaTable]

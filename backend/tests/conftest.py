@@ -60,12 +60,15 @@ def _build_sample_workbook() -> bytes:
         "SCENARIO_ID", "SCENARIO_NAME", "OUTPUT_TYPE",
         "YEAR", "MONTH", "TARIFF", "MACHINE_NAME",
         "POWER_POS__GWH", "INTRINSIC_VALUE__CUR", "EXTRINSIC_VALUE",
+        "IV_INCL_HEAT_COSTS", "HEAT_PRODUCTION__GWH",
     ]
     ws_data.append(headers)
 
     # Deterministic values keyed by (scenario_name, output_type)
     ev_values = {"Base_EV": 500.0, "Outage_EV": 700.0, "Final_EV": 1300.0}
     iv_values = {"Base_IV": 1000.0, "Outage_IV": 1200.0, "Final_IV": 1800.0}
+    iv_heat_values = {"Base_IV": 900.0, "Outage_IV": 1100.0, "Final_IV": 1700.0}
+    heat_production_values = {"Base_IV": 10.0, "Outage_IV": 12.0, "Final_IV": 18.0}
 
     for name, sid, otype, values in [
         ("Base_IV",   100, "INTRINSIC_VALUE", iv_values),
@@ -78,12 +81,15 @@ def _build_sample_workbook() -> bytes:
         val = values[name]
         for month in [5, 6]:
             for tariff in ["peak", "offpeak"]:
+                is_iv = name in iv_values
                 ws_data.append([
                     sid, name, otype,
                     2026, month, tariff, "MACHINE_A",
                     val,   # POWER_POS__GWH
                     val,   # INTRINSIC_VALUE__CUR
                     val,   # EXTRINSIC_VALUE
+                    iv_heat_values[name] if is_iv else 0.0,
+                    heat_production_values[name] if is_iv else 0.0,
                 ])
 
     buf = io.BytesIO()

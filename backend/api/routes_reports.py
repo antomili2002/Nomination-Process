@@ -116,6 +116,11 @@ def data_preview(body: DataPreviewRequest):
         iv_monthly=_to_pivot_tables(result["iv_monthly"]),
         iv_deltas=_to_pivot_tables(result["iv_deltas"]),
         pp_monthly=_to_pivot_tables(result["pp_monthly"]),
+        pp_deltas=_to_pivot_tables(result["pp_deltas"]),
+        iv_heat_monthly=_to_pivot_tables(result["iv_heat_monthly"]),
+        iv_heat_deltas=_to_pivot_tables(result["iv_heat_deltas"]),
+        heat_prod_monthly=_to_pivot_tables(result["heat_prod_monthly"]),
+        heat_prod_deltas=_to_pivot_tables(result["heat_prod_deltas"]),
     )
 
 
@@ -141,4 +146,10 @@ def generate_report(body: ReportGenerationRequest):
         pp_monthly=_to_pivot_tables(result["pp_monthly"]),
         pp_deltas=_to_yearly_delta_tables(result["pp_deltas"]),
         pp_machine_deltas=_to_machine_yearly_delta_tables(result["pp_machine_deltas"]),
+        iv_heat_monthly=_to_pivot_tables(result["iv_heat_monthly"]),
+        iv_heat_deltas=_to_yearly_delta_tables(result["iv_heat_deltas"]),
+        iv_heat_machine_deltas=_to_machine_yearly_delta_tables(result["iv_heat_machine_deltas"]),
+        heat_prod_monthly=_to_pivot_tables(result["heat_prod_monthly"]),
+        heat_prod_deltas=_to_yearly_delta_tables(result["heat_prod_deltas"]),
+        heat_prod_machine_deltas=_to_machine_yearly_delta_tables(result["heat_prod_machine_deltas"]),
     )

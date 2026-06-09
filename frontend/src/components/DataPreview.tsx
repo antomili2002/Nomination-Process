@@ -9,6 +9,11 @@ interface DataPreviewPayload {
   iv_monthly: PivotTableData[]
   iv_deltas:  PivotTableData[]
   pp_monthly: PivotTableData[]
+  pp_deltas:  PivotTableData[]
+  iv_heat_monthly: PivotTableData[]
+  iv_heat_deltas:  PivotTableData[]
+  heat_prod_monthly: PivotTableData[]
+  heat_prod_deltas:  PivotTableData[]
 }
 
 interface Props {
@@ -17,7 +22,7 @@ interface Props {
   evChain: number[]
 }
 
-type Tab = 'ev' | 'iv' | 'pp'
+type Tab = 'ev' | 'iv' | 'pp' | 'ivHeat' | 'heatProd'
 
 export function DataPreview({ uploadId, ivChain, evChain }: Props) {
   const [data, setData] = useState<DataPreviewPayload | null>(null)
@@ -63,9 +68,17 @@ export function DataPreview({ uploadId, ivChain, evChain }: Props) {
     ? {
         ev: { monthly: data.ev_monthly, deltas: data.ev_deltas },
         iv: { monthly: data.iv_monthly, deltas: data.iv_deltas },
-        pp: { monthly: data.pp_monthly, deltas: [] },
+        pp: { monthly: data.pp_monthly, deltas: data.pp_deltas },
+        ivHeat: { monthly: data.iv_heat_monthly, deltas: data.iv_heat_deltas },
+        heatProd: { monthly: data.heat_prod_monthly, deltas: data.heat_prod_deltas },
       }
-    : { ev: { monthly: [], deltas: [] }, iv: { monthly: [], deltas: [] }, pp: { monthly: [], deltas: [] } }
+    : {
+        ev: { monthly: [], deltas: [] },
+        iv: { monthly: [], deltas: [] },
+        pp: { monthly: [], deltas: [] },
+        ivHeat: { monthly: [], deltas: [] },
+        heatProd: { monthly: [], deltas: [] },
+      }
 
   return (
     <div className="card" style={{ marginTop: 'var(--sp-6)' }}>
@@ -109,7 +122,13 @@ export function DataPreview({ uploadId, ivChain, evChain }: Props) {
         <>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 'var(--sp-1)', marginBottom: 'var(--sp-4)', borderBottom: '1px solid var(--clr-border)', paddingBottom: 0 }}>
-            {([['ev', 'EV Monthly'], ['iv', 'IV Monthly'], ['pp', 'Power Position']] as const).map(([tab, label]) => (
+            {([
+              ['ev', 'EV'],
+              ['iv', 'IV'],
+              ['pp', 'Power Position'],
+              ['ivHeat', 'IV incl. Heat'],
+              ['heatProd', 'Heat Production'],
+            ] as const).map(([tab, label]) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
