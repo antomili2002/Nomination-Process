@@ -19,6 +19,28 @@ interface DeltaPair {
   stepNumber: number | null
 }
 
+const EV_SCENARIO_RE = /(^|[^a-z0-9])ev([^a-z0-9]|$)/i
+const IV_SCENARIO_RE = /(^|[^a-z0-9])iv([^a-z0-9]|$)/i
+
+function isEvScenario(scenario: ScenarioRow): boolean {
+  return EV_SCENARIO_RE.test(scenario.scenarioName) || scenario.scenarioType.toUpperCase() === 'EV'
+}
+
+function isIvScenario(scenario: ScenarioRow): boolean {
+  return IV_SCENARIO_RE.test(scenario.scenarioName) || scenario.scenarioType.toUpperCase() === 'IV'
+}
+
+function buildInitialChains(scenarios: ScenarioRow[]): ChainState {
+  const ev = scenarios.filter(isEvScenario).map(s => s.index)
+  const iv = scenarios.filter(s => isIvScenario(s) || !isEvScenario(s)).map(s => s.index)
+  const fallback = scenarios.slice(0, 2).map(s => s.index)
+
+  return {
+    iv: iv.length >= 2 ? iv : fallback,
+    ev: ev.length >= 2 ? ev : fallback,
+  }
+}
+
 function computeDeltaPairs(chain: number[], scenarios: ScenarioRow[]): DeltaPair[] {
   const nameOf = (idx: number) =>
     scenarios.find(s => s.index === idx)?.scenarioName ?? `Scenario ${idx}`
@@ -39,10 +61,7 @@ type DragSrc =
 export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
   const { scenarios, machines, uploadId, fileName } = uploadCtx
 
-  const [chains, setChains] = useState<ChainState>({
-    iv: scenarios.slice(0, 2).map(s => s.index),
-    ev: scenarios.slice(0, 2).map(s => s.index),
-  })
+  const [chains, setChains] = useState<ChainState>(() => buildInitialChains(scenarios))
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -146,7 +165,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         <div style={{ padding: 'var(--sp-4) var(--sp-6)', borderBottom: '1px solid var(--clr-border)' }}>
           <p className="section-label">Available scenarios</p>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', marginTop: 4 }}>
-            Drag a row into the IV or EV chain below to add it
+            Scenario chains are pre-filled from EV/IV naming. Drag rows below only when you need to adjust the order.
           </p>
         </div>
         <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
