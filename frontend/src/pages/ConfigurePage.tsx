@@ -1,5 +1,7 @@
 ﻿import React, { useRef, useState } from 'react'
 import type { UploadContext, ScenarioRow, ReportData } from '../App'
+import { buildInitialChains } from './scenarioChains'
+import type { ChainState } from './scenarioChains'
 
 interface Props {
   uploadCtx: UploadContext
@@ -7,38 +9,11 @@ interface Props {
   onSuccess: (data: ReportData) => void
 }
 
-interface ChainState {
-  iv: number[]
-  ev: number[]
-}
-
 interface DeltaPair {
   leftName: string
   rightName: string
   type: 'step' | 'cumulative'
   stepNumber: number | null
-}
-
-const EV_SCENARIO_RE = /(^|[^a-z0-9])ev([^a-z0-9]|$)/i
-const IV_SCENARIO_RE = /(^|[^a-z0-9])iv([^a-z0-9]|$)/i
-
-function isEvScenario(scenario: ScenarioRow): boolean {
-  return EV_SCENARIO_RE.test(scenario.scenarioName) || scenario.scenarioType.toUpperCase() === 'EV'
-}
-
-function isIvScenario(scenario: ScenarioRow): boolean {
-  return IV_SCENARIO_RE.test(scenario.scenarioName) || scenario.scenarioType.toUpperCase() === 'IV'
-}
-
-function buildInitialChains(scenarios: ScenarioRow[]): ChainState {
-  const ev = scenarios.filter(isEvScenario).map(s => s.index)
-  const iv = scenarios.filter(s => isIvScenario(s) || !isEvScenario(s)).map(s => s.index)
-  const fallback = scenarios.slice(0, 2).map(s => s.index)
-
-  return {
-    iv: iv.length >= 2 ? iv : fallback,
-    ev: ev.length >= 2 ? ev : fallback,
-  }
 }
 
 function computeDeltaPairs(chain: number[], scenarios: ScenarioRow[]): DeltaPair[] {
@@ -171,7 +146,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         <div style={{ padding: 'var(--sp-4) var(--sp-6)', borderBottom: '1px solid var(--clr-border)' }}>
           <p className="section-label">Available scenarios</p>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', marginTop: 4 }}>
-            Scenario chains are pre-filled from EV/IV naming. Drag rows below only when you need to adjust the order.
+            Scenario chains are pre-filled from EV/IV naming and numeric prefixes like 0_, 1_, 2_. Drag rows below only when you need to adjust the order.
           </p>
         </div>
         <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>

@@ -218,6 +218,23 @@ export function UploadPage({ onSuccess }: Props) {
           Expected sheets: <strong>Info</strong> (scenario metadata) and <strong>Data</strong>{' '}
           (scenario results with columns SCENARIO_ID, SCENARIO_NAME, OUTPUT_TYPE, YEAR, MONTH,
           TARIFF, MACHINE_NAME, and metric columns).
+          {' '}For automatic chain ordering, name scenarios with numeric prefixes:
+          {' '}<strong>0_Base_IV</strong>, <strong>1_Intermediate_IV</strong>,
+          {' '}<strong>2_Final_IV</strong> and the same pattern for EV.
+        </span>
+      </div>
+
+      {/* Info note */}
+      <div className="alert alert--info" role="note">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M8 7v5M8 5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        <span>
+          Expected naming convention:
+          {' '}For automatic chain ordering, name scenarios with numeric prefixes:
+          {' '}<strong>0_Base_IV</strong>, <strong>1_Intermediate_IV</strong>,
+          {' '}<strong>2_Final_IV</strong> and the same pattern for EV.
         </span>
       </div>
     </div>
