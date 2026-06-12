@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 from backend.core.constants import (
     MACHINE_NAME_COL,
@@ -47,24 +48,23 @@ def _coerce_year_month(df: pd.DataFrame) -> pd.DataFrame:
 def _coerce_metric_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Handle decimal-comma strings and convert metrics to float."""
     for col in METRIC_COLS:
-        if col not in df.columns:
-            continue
-        if df[col].dtype != object:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-            continue
-        # Try standard numeric conversion first
-        direct = pd.to_numeric(df[col], errors="coerce")
-        new_nans = direct.isna().sum() - df[col].isna().sum()
-        if new_nans == 0:
-            # No parsing failures — column is already in standard format
-            df[col] = direct.fillna(0.0)
-        else:
-            # Fall back to European decimal-comma format: "1.234,56" → 1234.56
-            converted = (
-                df[col]
-                .astype(str)
-                .str.replace(".", "", regex=False)
-                .str.replace(",", ".", regex=False)
-            )
-            df[col] = pd.to_numeric(converted, errors="coerce").fillna(0.0)
+        if col in df.columns:
+            df[col] = _coerce_metric_series(df[col])
     return df
+
+
+def _coerce_metric_series(series: pd.Series) -> pd.Series:
+    if is_numeric_dtype(series):
+        return pd.to_numeric(series, errors="coerce").fillna(0.0)
+
+    text = series.astype("string").str.strip()
+    direct = pd.to_numeric(text, errors="coerce")
+
+    comma_decimal = text.str.contains(",", regex=False, na=False)
+    european_text = (
+        text.str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    european = pd.to_numeric(european_text, errors="coerce")
+
+    return direct.mask(comma_decimal, european).fillna(0.0)

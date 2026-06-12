@@ -18,3 +18,5 @@ backend/tmp/
 .tmp*
 
 .superpowers/
+.vercel
+.env*
