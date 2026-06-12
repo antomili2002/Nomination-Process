@@ -1,5 +1,6 @@
 ﻿import React, { useRef, useState } from 'react'
 import type { UploadContext, ScenarioRow, ReportData } from '../App'
+import { buildApiUrl } from '../api'
 import { buildInitialChains } from './scenarioChains'
 import type { ChainState } from './scenarioChains'
 
@@ -92,7 +93,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         ev_chain: chains.ev,
         selected_machines: null,
       }
-      const res = await fetch('/api/reports/generate', {
+      const res = await fetch(buildApiUrl('/reports/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

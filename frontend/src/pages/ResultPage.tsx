@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import { Download, FilePlus2, SlidersHorizontal } from 'lucide-react'
+import { buildApiUrl } from '../api'
 import type { ReportData } from '../types/report'
 import type { PivotTableData } from '../components/PivotTable'
 import {
@@ -110,7 +111,7 @@ export function ResultPage({ reportData, onReset }: Props) {
   async function handleDownload() {
     setDownloading(true)
     try {
-      const resp = await fetch('/api/reports/export', {
+      const resp = await fetch(buildApiUrl('/reports/export'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,7 +160,7 @@ export function ResultPage({ reportData, onReset }: Props) {
 
     setRecomputing(true)
     try {
-      const resp = await fetch('/api/reports/generate', {
+      const resp = await fetch(buildApiUrl('/reports/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: uploadId, iv_chain: ivChain, ev_chain: evChain, selected_machines: sel }),

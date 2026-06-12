@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { UploadContext } from '../App'
+import { buildApiUrl } from '../api'
 
 interface Props {
   onSuccess: (ctx: UploadContext) => void
@@ -56,7 +57,7 @@ export function UploadPage({ onSuccess }: Props) {
       const form = new FormData()
       form.append('file', file)
 
-      const res = await fetch('/api/upload', { method: 'POST', body: form })
+      const res = await fetch(buildApiUrl('/upload'), { method: 'POST', body: form })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body?.detail ?? `Upload failed (${res.status})`)

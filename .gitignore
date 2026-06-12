@@ -3,6 +3,7 @@
 *.log
 *.tmp
 node_modules/
+.vercel/
 .superpowers/
 
 # Ignore pycache and other Python artifacts

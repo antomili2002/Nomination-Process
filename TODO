@@ -6,3 +6,6 @@ Refactoring:
 
 Tests:
 - Check Test Coverage and run tests
+- Add tests for frontend
+- Check for refactorings that can be made to improve testability (e.g. extract pure functions, add interfaces)
+- Add tests for new functions and components

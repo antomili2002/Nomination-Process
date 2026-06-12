@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { buildApiUrl } from '../api'
 import { PivotTable } from './PivotTable'
 import type { PivotTableData } from './PivotTable'
 
@@ -42,7 +43,7 @@ export function DataPreview({ uploadId, ivChain, evChain }: Props) {
         ev_chain: evChain,
         selected_machines: selectedMachine === '__all__' ? null : [selectedMachine],
       }
-      const res = await fetch('/api/reports/data-preview', {
+      const res = await fetch(buildApiUrl('/reports/data-preview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

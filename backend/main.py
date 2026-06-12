@@ -51,3 +51,8 @@ app.add_middleware(
 app.include_router(upload_router)
 app.include_router(reports_router)
 app.include_router(download_router)
+
+
+@app.get("/healthz", tags=["health"])
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}

@@ -1,0 +1,20 @@
+name: Keep backend awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Ping backend health endpoint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call backend health endpoint
+        run: curl -fsS --max-time 30 "$BACKEND_HEALTH_URL"
+        env:
+          BACKEND_HEALTH_URL: ${{ vars.BACKEND_BASE_URL }}/healthz
