@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import shutil
 import time
 from contextlib import asynccontextmanager
@@ -11,6 +13,7 @@ from backend.api.routes_upload import router as upload_router
 from backend.core.config import settings
 
 _UPLOAD_TTL_SECONDS = 4 * 3600  # keep uploads for 4 hours
+_LOGGER = logging.getLogger(__name__)
 
 
 def _cleanup_stale_uploads() -> None:
@@ -32,9 +35,23 @@ def _cleanup_stale_uploads() -> None:
             pass
 
 
+async def _cleanup_stale_uploads_in_background() -> None:
+    await asyncio.to_thread(_cleanup_stale_uploads)
+
+
+def _log_background_cleanup_result(task: asyncio.Task[None]) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        _LOGGER.exception("Upload cleanup failed")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    _cleanup_stale_uploads()
+    cleanup_task = asyncio.create_task(_cleanup_stale_uploads_in_background())
+    cleanup_task.add_done_callback(_log_background_cleanup_result)
     yield
 
 
