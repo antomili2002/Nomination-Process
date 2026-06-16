@@ -78,7 +78,7 @@ the checklist for adding future reports.
 │                                                                     │
 │  ── storage/ ───────────────────────────────────────────────────    │
 │  temp_files.py          save_upload()  get_upload_path()            │
-│                         delete_upload()                             │
+│                         cleanup_stale_uploads()                    │
 │                                                                     │
 │  ── core/ ──────────────────────────────────────────────────────    │
 │  config.py              Settings (upload_dir, report_dir, CORS)     │
@@ -88,7 +88,7 @@ the checklist for adding future reports.
          │ writes / reads
 ┌────────▼────────┐
 │ backend/tmp/    │
-│   uploads/      │  .xlsx files (deleted after generate_report)
+│   uploads/      │  .xlsx files retained until TTL cleanup
 │   reports/      │  (reserved for future download endpoint)
 └─────────────────┘
 ```
@@ -108,9 +108,14 @@ POST /reports/generate
       → yearly_delta_output.compute_yearly_delta (per pair)
       → returns plain dict
     → controller maps dict → GenerateReportResponse (Pydantic)
-  → BackgroundTask: temp_files.delete_upload
   → HTTP 200 JSON
 ```
+
+Uploads are intentionally not deleted by `/reports/generate`. Keeping the
+upload directory for a bounded TTL lets the frontend recompute reports and
+Excel exports from the same processed workbook cache without re-uploading or
+re-parsing the source file. Disk growth is bounded by a periodic background
+cleanup task started from the FastAPI lifespan.
 
 ---
 
@@ -240,9 +245,10 @@ def test_my_endpoint(sample_workbook_bytes):
     assert resp.json()["key"] == "expected"
 ```
 
-**Important:** `POST /reports/generate` deletes the uploaded file as a
-background task. Use a **function-scoped** fixture (default scope) for
-`uploaded` in any test that calls this endpoint.
+**Important:** `POST /reports/generate` no longer deletes uploaded files.
+Uploads are reusable until the configured TTL expires. Use a
+**function-scoped** fixture (default scope) when a test needs isolated upload
+state, not because report generation removes the file.
 
 ---
 
@@ -329,6 +335,8 @@ UPLOAD_DIR=/data/uploads
 REPORT_DIR=/data/reports
 CORS_ORIGINS=["https://your-frontend-domain.com"]
 MAX_UPLOAD_BYTES=157286400   # 150 MB
+UPLOAD_TTL_SECONDS=14400
+UPLOAD_CLEANUP_INTERVAL_SECONDS=900
 ```
 
 **Important for multi-worker:** `UPLOAD_DIR` and `REPORT_DIR` must be on a
@@ -394,6 +402,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 | `REPORT_DIR` | `backend/tmp/reports` | Where generated Excel reports are stored |
 | `CORS_ORIGINS` | `["http://localhost:5173"]` | Allowed CORS origins |
 | `MAX_UPLOAD_BYTES` | `157286400` (150 MB) | Max accepted file size |
+| `UPLOAD_TTL_SECONDS` | `14400` (4 hours) | How long uploaded workbook directories are retained |
+| `UPLOAD_CLEANUP_INTERVAL_SECONDS` | `900` (15 minutes) | How often the backend scans for stale upload directories |
 
 
 ---

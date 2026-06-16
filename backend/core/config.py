@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     report_dir: Path = Path("backend/tmp/reports")
     cors_origins: list[str] = ["http://localhost:5173"]
     max_upload_bytes: int = 150 * 1024 * 1024  # 150 MB
+    upload_ttl_seconds: int = 4 * 3600
+    upload_cleanup_interval_seconds: int = 15 * 60
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

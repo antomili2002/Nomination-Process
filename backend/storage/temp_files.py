@@ -1,4 +1,5 @@
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -59,15 +60,26 @@ def get_report_path(report_id: str) -> Path:
     return files[0]
 
 
-def delete_upload(upload_id: str) -> None:
-    """Remove the upload directory for *upload_id*.
+def cleanup_stale_uploads(now: float | None = None) -> int:
+    """Delete upload directories older than the configured TTL.
 
-    Called as a background task after report generation so that temporary
-    workbooks do not accumulate on disk.  Errors are silently ignored —
-    a failed cleanup should never surface to the user as an HTTP error.
+    Returns the number of directories deleted. Failures for individual
+    directories are ignored so cleanup cannot break request handling.
     """
-    upload_dir = settings.upload_dir / upload_id
-    shutil.rmtree(upload_dir, ignore_errors=True)
+    upload_dir = settings.upload_dir
+    if not upload_dir.exists():
+        return 0
+
+    cutoff = (time.time() if now is None else now) - settings.upload_ttl_seconds
+    deleted = 0
+    for entry in upload_dir.iterdir():
+        try:
+            if entry.is_dir() and entry.stat().st_mtime < cutoff:
+                shutil.rmtree(entry)
+                deleted += 1
+        except OSError:
+            pass
+    return deleted
 
 
 # internal 

@@ -89,8 +89,10 @@ backend/tmp/uploads/<upload_id>/
 The original workbook is still retained for traceability and compatibility.
 The `.pkl` artifacts avoid repeated Excel parsing and repeated pandas cleaning.
 
-The upload cleanup flow still removes the whole upload directory, so processed
-artifacts are deleted together with the original workbook.
+The periodic upload cleanup flow removes the whole upload directory after the
+configured TTL, so processed artifacts are deleted together with the original
+workbook. This keeps recomputation and export fast during the active session
+while bounding disk usage in production.
 
 ## Performance Improvements
 

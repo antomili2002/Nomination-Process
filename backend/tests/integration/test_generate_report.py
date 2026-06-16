@@ -4,9 +4,9 @@ These tests spin up the FastAPI app via TestClient (no real server needed) and
 exercise the complete request/response cycle including the service layer and all
 processing functions.
 
-Upload fixture is function-scoped for the generate tests because
-POST /reports/generate schedules the uploaded file for deletion as a background
-task.  A fresh upload is therefore required for each independent generate call.
+Uploads are retained for the configured TTL so generate/export calls can reuse
+the processed workbook cache. The function-scoped fixture keeps each generate
+test isolated from previous report state.
 """
 import io
 
@@ -48,7 +48,7 @@ def uploaded_module(sample_workbook_bytes):
 
 @pytest.fixture
 def uploaded(sample_workbook_bytes):
-    """Function-scoped upload — each generate test gets a fresh file."""
+    """Function-scoped upload so each generate test gets isolated state."""
     return _upload(sample_workbook_bytes)
 
 # POST /upload
