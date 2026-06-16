@@ -16,31 +16,29 @@ from typing import Optional
 
 import pandas as pd
 
+from backend.core.config import settings
 from backend.domain.report_metrics import REPORT_METRICS, ReportMetric
+from backend.domain.workbook import WorkbookData
 from backend.processing.chain_builder import DeltaPair, build_delta_pairs, validate_chain
-from backend.processing.cleaning import clean_data
-from backend.processing.readers import read_workbook_sheets
 from backend.processing.report_builder import (
+    ReportAggregationCache,
     build_available_machines,
     build_metric_preview,
     build_metric_report,
 )
-from backend.processing.scenario_extraction import extract_scenarios
-from backend.storage.temp_files import get_upload_path
+from backend.storage.processed_uploads import load_workbook_data
 
 
 # Private helpers
-def _load_workbook(upload_id: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Read the workbook and return (info_df, data_df).
+def _load_workbook_data(upload_id: str) -> WorkbookData:
+    """Load persisted parsed workbook artifacts for an upload.
 
     Raises FileNotFoundError if the upload_id is unknown.
     """
-    path = get_upload_path(upload_id)
-    return read_workbook_sheets(path)
+    return load_workbook_data(settings.upload_dir / upload_id)
 
 
-def _build_index_map(info_df: pd.DataFrame) -> dict[int, str]:
-    scenario_df = extract_scenarios(info_df)
+def _build_index_map(scenario_df: pd.DataFrame) -> dict[int, str]:
     return dict(zip(scenario_df["index"].tolist(), scenario_df["scenario_name"].tolist()))
 
 
@@ -64,8 +62,8 @@ def preview_chain(upload_id: str, iv_chain: list[int], ev_chain: list[int]) -> d
     -------
     {"iv_pairs": [DeltaPair, ...], "ev_pairs": [DeltaPair, ...]}
     """
-    info_df, _ = _load_workbook(upload_id)
-    index_to_name = _build_index_map(info_df)
+    workbook = _load_workbook_data(upload_id)
+    index_to_name = _build_index_map(workbook.scenarios_df)
     available = set(index_to_name)
 
     validate_chain(iv_chain, available)
@@ -87,9 +85,18 @@ def preview_data(
 
     Returns a plain dict whose structure mirrors ``DataPreviewResponse``.
     """
-    info_df, data_df = _load_workbook(upload_id)
-    data_df = clean_data(data_df)
-    index_to_name = _build_index_map(info_df)
+    workbook = _load_workbook_data(upload_id)
+    return preview_data_from_workbook(workbook, iv_chain, ev_chain, selected_machines)
+
+
+def preview_data_from_workbook(
+    workbook: WorkbookData,
+    iv_chain: list[int],
+    ev_chain: list[int],
+    selected_machines: Optional[list[str]],
+) -> dict:
+    data_df = workbook.clean_data_df
+    index_to_name = _build_index_map(workbook.scenarios_df)
     available = set(index_to_name)
 
     validate_chain(iv_chain, available)
@@ -97,6 +104,7 @@ def preview_data(
 
     iv_pairs = build_delta_pairs(iv_chain, index_to_name)
     ev_pairs = build_delta_pairs(ev_chain, index_to_name)
+    cache = ReportAggregationCache(data_df, selected_machines)
     result: dict = {"available_machines": build_available_machines(data_df)}
     for metric in REPORT_METRICS:
         result.update(build_metric_preview(
@@ -106,6 +114,7 @@ def preview_data(
             metric=metric,
             index_to_name=index_to_name,
             selected_machines=selected_machines,
+            cache=cache,
         ))
     return result
 
@@ -121,9 +130,21 @@ def generate_report(
     Returns a plain dict whose structure mirrors ``GenerateReportResponse``.
     The ``report_id`` is a freshly generated UUID.
     """
-    info_df, data_df = _load_workbook(upload_id)
-    data_df = clean_data(data_df)
-    index_to_name = _build_index_map(info_df)
+    workbook = _load_workbook_data(upload_id)
+    return generate_report_from_workbook(
+        workbook, upload_id, iv_chain, ev_chain, selected_machines
+    )
+
+
+def generate_report_from_workbook(
+    workbook: WorkbookData,
+    upload_id: str,
+    iv_chain: list[int],
+    ev_chain: list[int],
+    selected_machines: Optional[list[str]],
+) -> dict:
+    data_df = workbook.clean_data_df
+    index_to_name = _build_index_map(workbook.scenarios_df)
     available = set(index_to_name)
 
     validate_chain(iv_chain, available)
@@ -131,6 +152,7 @@ def generate_report(
 
     iv_pairs = build_delta_pairs(iv_chain, index_to_name)
     ev_pairs = build_delta_pairs(ev_chain, index_to_name)
+    cache = ReportAggregationCache(data_df, selected_machines)
     result: dict = {
         "report_id":  str(uuid.uuid4()),
         "upload_id":  upload_id,
@@ -143,5 +165,6 @@ def generate_report(
             metric=metric,
             index_to_name=index_to_name,
             selected_machines=selected_machines,
+            cache=cache,
         ))
     return result

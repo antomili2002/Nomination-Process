@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import pandas as pd
+from fastapi import UploadFile
+
+from backend.core.constants import MACHINE_NAME_COL
+from backend.core.config import settings
+from backend.domain.workbook import ScenarioInfo, UploadedWorkbook, WorkbookData
+from backend.processing.cleaning import clean_data
+from backend.processing.readers import read_workbook_sheets
+from backend.processing.scenario_extraction import extract_scenarios
+from backend.storage.processed_uploads import save_workbook_data
+from backend.storage.temp_files import save_upload
+
+
+def process_upload(file: UploadFile) -> UploadedWorkbook:
+    """Save an uploaded workbook and persist parsed artifacts for later use."""
+    upload_id, path = save_upload(file)
+    info_df, raw_data_df = read_workbook_sheets(path)
+    scenarios_df = extract_scenarios(info_df)
+    clean_data_df = clean_data(raw_data_df)
+    machines = _extract_machines(clean_data_df)
+
+    save_workbook_data(
+        settings.upload_dir / upload_id,
+        WorkbookData(
+            info_df=info_df,
+            raw_data_df=raw_data_df,
+            clean_data_df=clean_data_df,
+            scenarios_df=scenarios_df,
+            machines=machines,
+        ),
+    )
+
+    return UploadedWorkbook(
+        upload_id=upload_id,
+        file_name=file.filename or "upload.xlsx",
+        scenarios=_to_domain_scenarios(scenarios_df),
+        machines=machines,
+    )
+
+
+def _to_domain_scenarios(df: pd.DataFrame) -> list[ScenarioInfo]:
+    return [
+        ScenarioInfo(
+            index=int(row["index"]),
+            scenario_name=str(row["scenario_name"]),
+            scenario_id=int(row["scenario_id"]),
+            market_area=str(row.get("market_area", "")),
+            scenario_type=str(row.get("scenario_type", "")),
+            status=str(row.get("status", "")),
+            role=row.get("role") or None,
+        )
+        for _, row in df.iterrows()
+    ]
+
+
+def _extract_machines(data_df: pd.DataFrame) -> list[str]:
+    if MACHINE_NAME_COL not in data_df.columns:
+        return []
+    return sorted(data_df[MACHINE_NAME_COL].dropna().unique().tolist())

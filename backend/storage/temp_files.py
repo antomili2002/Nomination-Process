@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import UploadFile
 
 from backend.core.config import settings
-from backend.core.exceptions import InvalidWorkbookError
+from backend.core.exceptions import InvalidUploadError
 
 
 def save_upload(file: UploadFile) -> tuple[str, Path]:
@@ -23,7 +23,7 @@ def save_upload(file: UploadFile) -> tuple[str, Path]:
             bytes_written += len(chunk)
             if bytes_written > settings.max_upload_bytes:
                 dest_path.unlink(missing_ok=True)
-                raise InvalidWorkbookError(
+                raise InvalidUploadError(
                     f"File exceeds the maximum allowed size of "
                     f"{settings.max_upload_bytes // (1024 * 1024)} MB."
                 )
@@ -73,4 +73,4 @@ def delete_upload(upload_id: str) -> None:
 # internal 
 def _validate_extension(filename: str) -> None:
     if not filename.lower().endswith(".xlsx"):
-        raise InvalidWorkbookError("Only .xlsx files are accepted.")
+        raise InvalidUploadError("Only .xlsx files are accepted.")

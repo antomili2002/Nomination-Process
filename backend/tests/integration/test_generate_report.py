@@ -10,6 +10,7 @@ task.  A fresh upload is therefore required for each independent generate call.
 """
 import io
 
+import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 
@@ -78,6 +79,20 @@ class TestUpload:
             files={"file": ("bad.csv", io.BytesIO(b"a,b"), "text/csv")},
         )
         assert resp.status_code == 400
+
+    def test_invalid_workbook_structure_returns_422(self):
+        workbook = openpyxl.Workbook()
+        workbook.active.title = "Info"
+        buf = io.BytesIO()
+        workbook.save(buf)
+        buf.seek(0)
+
+        resp = client.post(
+            "/upload",
+            files={"file": ("missing-data.xlsx", buf, _XLSX_MIME)},
+        )
+
+        assert resp.status_code == 422
 
 
 # POST /reports/preview-chain

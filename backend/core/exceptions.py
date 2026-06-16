@@ -1,3 +1,7 @@
+class InvalidUploadError(ValueError):
+    """Uploaded file fails transport-level validation."""
+
+
 class InvalidWorkbookError(ValueError):
     """Uploaded workbook is missing required sheets or columns."""
 

@@ -1,8 +1,8 @@
 """Business logic for the Excel download endpoint.
 
 Orchestrates:
-  1. Recomputing the report data from the stored upload.
-  2. Reading the Info / Data sheets from the same upload.
+  1. Loading parsed workbook artifacts for the stored upload.
+  2. Computing report data from the cleaned artifact.
   3. Calling the Excel writer to produce the final workbook bytes.
 """
 from __future__ import annotations
@@ -10,10 +10,10 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
+from backend.core.config import settings
 from backend.excel import report_writer
-from backend.processing.readers import read_workbook_sheets
 from backend.services import report_service
-from backend.storage.temp_files import get_upload_path
+from backend.storage.processed_uploads import load_workbook_data
 
 
 def create_excel_report(
@@ -31,16 +31,18 @@ def create_excel_report(
     InvalidChainError / InvalidWorkbookError / ScenarioExtractionError
         Propagated from the underlying service layer.
     """
-    # Load Info and Data sheets for copying into the output workbook.
-    path = get_upload_path(upload_id)
-    info_df, data_df = read_workbook_sheets(path)
+    # Load parsed artifacts once for both report computation and raw-sheet copy.
+    workbook = load_workbook_data(settings.upload_dir / upload_id)
 
-    # Recompute the pivot/delta data (same logic as the /generate endpoint).
-    report_data = report_service.generate_report(
-        upload_id, iv_chain, ev_chain, selected_machines
+    report_data = report_service.generate_report_from_workbook(
+        workbook, upload_id, iv_chain, ev_chain, selected_machines
     )
 
-    excel_bytes = report_writer.write_report(report_data, info_df, data_df)
+    excel_bytes = report_writer.write_report(
+        report_data,
+        workbook.info_df,
+        workbook.raw_data_df,
+    )
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"scenario_report_{timestamp}.xlsx"
