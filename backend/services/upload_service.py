@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pandas as pd
 from fastapi import UploadFile
 
@@ -17,8 +19,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
     """Save an uploaded workbook and persist parsed artifacts for later use."""
     upload_id, path = save_upload(file)
     info_df, raw_data_df = read_workbook_sheets(path)
-    scenarios_df = extract_scenarios(info_df)
-    clean_data_df = clean_data(raw_data_df)
+    scenarios_df, clean_data_df = _process_workbook_frames(info_df, raw_data_df)
     machines = _extract_machines(clean_data_df)
 
     save_workbook_data(
@@ -38,6 +39,19 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
         scenarios=_to_domain_scenarios(scenarios_df),
         machines=machines,
     )
+
+
+def _process_workbook_frames(
+    info_df: pd.DataFrame,
+    raw_data_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Extract metadata and clean data concurrently after workbook parsing."""
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        scenarios_future = executor.submit(extract_scenarios, info_df)
+        clean_data_future = executor.submit(clean_data, raw_data_df)
+        scenarios_df = scenarios_future.result()
+        clean_data_df = clean_data_future.result()
+    return scenarios_df, clean_data_df
 
 
 def _to_domain_scenarios(df: pd.DataFrame) -> list[ScenarioInfo]:
