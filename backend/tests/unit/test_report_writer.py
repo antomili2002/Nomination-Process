@@ -8,7 +8,9 @@ import io
 import openpyxl
 import pandas as pd
 import pytest
+import xlsxwriter
 
+from backend.excel import report_writer
 from backend.excel.report_writer import write_report
 
 
@@ -286,6 +288,23 @@ def test_returns_bytes(simple_report_data, simple_info_df, simple_data_df):
     result = write_report(simple_report_data, simple_info_df, simple_data_df)
     assert isinstance(result, bytes)
     assert len(result) > 0
+
+
+def test_uses_xlsxwriter_constant_memory(
+    monkeypatch, simple_report_data, simple_info_df, simple_data_df
+):
+    seen = {}
+    real_workbook = xlsxwriter.Workbook
+
+    def spy_workbook(filename, options=None):
+        seen["options"] = options or {}
+        return real_workbook(filename, options)
+
+    monkeypatch.setattr(report_writer.xlsxwriter, "Workbook", spy_workbook)
+
+    write_report(simple_report_data, simple_info_df, simple_data_df)
+
+    assert seen["options"]["constant_memory"] is True
 
 
 def test_all_sheets_present(wb):
