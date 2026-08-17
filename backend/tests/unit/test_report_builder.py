@@ -38,7 +38,6 @@ def test_build_metric_report_returns_all_payload_fields(clean_df):
     assert set(result) == {
         "heat_prod_monthly",
         "heat_prod_deltas",
-        "heat_prod_machine_deltas",
     }
 
 
@@ -75,10 +74,7 @@ def test_build_metric_report_applies_machine_filter(clean_df):
     )
 
     delta = result["heat_prod_deltas"][0]
-    machine_delta = result["heat_prod_machine_deltas"][0]
     assert delta["delta_total"] == pytest.approx(0.0)
-    assert machine_delta["rows"] == []
-    assert machine_delta["delta_total"] == pytest.approx(0.0)
 
 
 def test_build_metric_preview_returns_monthly_deltas_for_dashboard(clean_df):

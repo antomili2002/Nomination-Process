@@ -1,4 +1,4 @@
-"""Unit tests for yearly and machine-yearly delta output."""
+"""Unit tests for yearly delta output."""
 import pandas as pd
 import pytest
 
@@ -11,10 +11,7 @@ from backend.core.constants import (
     YEAR_COL,
 )
 from backend.processing.monthly_output import aggregate_monthly
-from backend.processing.yearly_delta_output import (
-    compute_machine_yearly_delta,
-    compute_yearly_delta,
-)
+from backend.processing.yearly_delta_output import compute_yearly_delta
 
 
 def _source_df() -> pd.DataFrame:
@@ -56,57 +53,3 @@ def test_yearly_delta_keeps_original_year_only_shape():
     assert result["left_total"] == pytest.approx(520.0)
     assert result["right_total"] == pytest.approx(480.0)
     assert result["delta_total"] == pytest.approx(-40.0)
-
-
-def test_machine_yearly_delta_returns_machine_and_year_rows():
-    result = compute_machine_yearly_delta(_source_df(), EV_COL, "Base_EV", "Final_EV")
-    assert result["rows"] == [
-        {
-            "machine_name": "MACHINE_A",
-            "year": 2026,
-            "left_value": 40.0,
-            "right_value": 60.0,
-            "delta": 20.0,
-        },
-        {
-            "machine_name": "MACHINE_A",
-            "year": 2027,
-            "left_value": 80.0,
-            "right_value": 100.0,
-            "delta": 20.0,
-        },
-        {
-            "machine_name": "MACHINE_B",
-            "year": 2026,
-            "left_value": 400.0,
-            "right_value": 320.0,
-            "delta": -80.0,
-        },
-    ]
-
-
-def test_machine_yearly_delta_machine_filter_limits_rows_and_totals():
-    result = compute_machine_yearly_delta(
-        _source_df(),
-        EV_COL,
-        "Base_EV",
-        "Final_EV",
-        selected_machines=["MACHINE_A"],
-    )
-    assert [row["machine_name"] for row in result["rows"]] == ["MACHINE_A", "MACHINE_A"]
-    assert result["left_total"] == pytest.approx(120.0)
-    assert result["right_total"] == pytest.approx(160.0)
-    assert result["delta_total"] == pytest.approx(40.0)
-
-
-def test_machine_yearly_delta_missing_right_machine_year_treated_as_zero():
-    df = _source_df()
-    df = df[~(
-        (df[SCENARIO_NAME_COL] == "Final_EV")
-        & (df[MACHINE_NAME_COL] == "MACHINE_B")
-    )]
-    result = compute_machine_yearly_delta(df, EV_COL, "Base_EV", "Final_EV")
-    machine_b = [r for r in result["rows"] if r["machine_name"] == "MACHINE_B"][0]
-    assert machine_b["left_value"] == pytest.approx(400.0)
-    assert machine_b["right_value"] == pytest.approx(0.0)
-    assert machine_b["delta"] == pytest.approx(-400.0)

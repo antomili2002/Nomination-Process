@@ -4,7 +4,6 @@ import { buildApiUrl } from '../api'
 import type { ReportData } from '../types/report'
 import type { PivotTableData } from '../components/PivotTable'
 import {
-  getMachineYearlyDeltas,
   getMonthlyTables,
   getSection,
   getSectionCount,
@@ -15,7 +14,6 @@ import {
 } from '../reportMetrics'
 import {
   ExcelPivotSection,
-  MachineYearlyDeltaSection,
   YearlyDeltaSection,
 } from '../components/report/ReportSections'
 
@@ -40,19 +38,14 @@ function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
     selectedMachines: base.selectedMachines,  // overwritten by caller
     evMonthly: p.ev_monthly as PivotTableData[],
     evDeltas:  p.ev_deltas  as ReportData['evDeltas'],
-    evMachineDeltas: p.ev_machine_deltas as ReportData['evMachineDeltas'],
     ivMonthly: p.iv_monthly as PivotTableData[],
     ivDeltas:  p.iv_deltas  as ReportData['ivDeltas'],
-    ivMachineDeltas: p.iv_machine_deltas as ReportData['ivMachineDeltas'],
     ppMonthly: p.pp_monthly as PivotTableData[],
     ppDeltas:  p.pp_deltas  as ReportData['ppDeltas'],
-    ppMachineDeltas: p.pp_machine_deltas as ReportData['ppMachineDeltas'],
     ivHeatMonthly: p.iv_heat_monthly as PivotTableData[],
     ivHeatDeltas:  p.iv_heat_deltas as ReportData['ivHeatDeltas'],
-    ivHeatMachineDeltas: p.iv_heat_machine_deltas as ReportData['ivHeatMachineDeltas'],
     heatProdMonthly: p.heat_prod_monthly as PivotTableData[],
     heatProdDeltas:  p.heat_prod_deltas as ReportData['heatProdDeltas'],
-    heatProdMachineDeltas: p.heat_prod_machine_deltas as ReportData['heatProdMachineDeltas'],
   }
 }
 
@@ -390,9 +383,6 @@ export function ResultPage({ reportData, onReset }: Props) {
           )}
           {activeSection.tableType === 'yearlyDelta' && (
             <YearlyDeltaSection tables={getYearlyDeltas(activeData, activeId)} metric={activeSection.metric} />
-          )}
-          {activeSection.tableType === 'machineYearlyDelta' && (
-            <MachineYearlyDeltaSection tables={getMachineYearlyDeltas(activeData, activeId)} metric={activeSection.metric} />
           )}
         </div>
       </div>

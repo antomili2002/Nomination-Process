@@ -50,14 +50,6 @@ def write_report(
                 metric.output_type,
                 formats,
             )
-            _write_machine_delta_sheet(
-                wb,
-                f"{metric.excel_prefix}_machine_sheet",
-                report_data[metric.machine_deltas_field],
-                metric.column,
-                metric.output_type,
-                formats,
-            )
 
         _df_to_sheet(wb, "Info", info_df, write_header=False, formats=formats)
         _df_to_sheet(wb, "Data", data_df, write_header=True, formats=formats)
@@ -262,95 +254,6 @@ def _write_delta_sheet(
         _w(ws, row_num, 3, right_total, formats["bold_blue_num_top"])
         _w(ws, row_num, 4, delta_total, formats["bold_blue_num_top"])
         row_num += 2
-
-
-def _write_machine_delta_sheet(
-    wb: xlsxwriter.Workbook,
-    sheet_name: str,
-    delta_tables: list[dict],
-    metric_col: str,
-    output_type: str,
-    formats: dict,
-) -> None:
-    ws = wb.add_worksheet(sheet_name)
-    ws.hide_gridlines(2)
-
-    ws.set_column(0, 0, 35)
-    ws.set_column(1, 2, 25)
-
-    _w(ws, 1, 1, "OUTPUT_TYPE", formats["blue"])
-    _w(ws, 1, 2, output_type, formats["blue"])
-    _w(ws, 2, 1, "MACHINE_NAME", formats["blue"])
-    _w(ws, 2, 2, "(All)", formats["blue"])
-
-    row_num = 4
-
-    for dt in delta_tables:
-        right_name: str = dt["right_name"]
-        left_name: str = dt["left_name"]
-        right_total: float = dt["right_total"]
-        left_total: float = dt["left_total"]
-        delta_total: float = dt["delta_total"]
-        dt_rows: list[dict] = dt["rows"]
-
-        _w(ws, row_num, 1, "Row Labels", formats["bold_blue_bottom"])
-        _w(ws, row_num, 2, f"Sum of {metric_col}", formats["bold_blue_bottom"])
-        _w(ws, row_num, 3, f"Dif of {metric_col}", formats["bold_blue_bottom"])
-        row_num += 1
-
-        left_machine_totals = _machine_totals(dt_rows, "left_value")
-        right_machine_totals = _machine_totals(dt_rows, "right_value")
-        delta_machine_totals = _machine_totals(dt_rows, "delta")
-
-        _w(ws, row_num, 1, left_name, formats["bold_bottom"])
-        _w(ws, row_num, 2, left_total, formats["bold_num_bottom"])
-        _w(ws, row_num, 3, None, formats["bold_bottom"])
-        row_num += 1
-
-        for machine_name, rows in _rows_by_machine(dt_rows).items():
-            _w(ws, row_num, 1, machine_name, formats["bold_indent1"])
-            _w(ws, row_num, 2, left_machine_totals[machine_name], formats["bold_num"])
-            row_num += 1
-            for row in rows:
-                _w(ws, row_num, 1, str(row["year"]), formats["indent2"])
-                _w(ws, row_num, 2, row["left_value"], formats["num"])
-                row_num += 1
-
-        _w(ws, row_num, 1, right_name, formats["bold_bottom"])
-        _w(ws, row_num, 2, right_total, formats["bold_num_bottom"])
-        _w(ws, row_num, 3, delta_total, formats["bold_num_bottom"])
-        row_num += 1
-
-        for machine_name, rows in _rows_by_machine(dt_rows).items():
-            _w(ws, row_num, 1, machine_name, formats["bold_indent1"])
-            _w(ws, row_num, 2, right_machine_totals[machine_name], formats["bold_num"])
-            _w(ws, row_num, 3, delta_machine_totals[machine_name], formats["bold_num"])
-            row_num += 1
-            for row in rows:
-                _w(ws, row_num, 1, str(row["year"]), formats["indent2"])
-                _w(ws, row_num, 2, row["right_value"], formats["num"])
-                _w(ws, row_num, 3, row["delta"], formats["num"])
-                row_num += 1
-
-        _w(ws, row_num, 1, "Grand Total", formats["bold_blue_top"])
-        _w(ws, row_num, 2, left_total + right_total, formats["bold_blue_num_top"])
-        _w(ws, row_num, 3, None, formats["bold_blue_top"])
-        row_num += 2
-
-
-def _rows_by_machine(rows: list[dict]) -> dict[str, list[dict]]:
-    grouped: dict[str, list[dict]] = {}
-    for row in sorted(rows, key=lambda r: (str(r["machine_name"]), int(r["year"]))):
-        grouped.setdefault(str(row["machine_name"]), []).append(row)
-    return grouped
-
-
-def _machine_totals(rows: list[dict], value_key: str) -> dict[str, float]:
-    totals: dict[str, float] = {}
-    for row in rows:
-        machine_name = str(row["machine_name"])
-        totals[machine_name] = totals.get(machine_name, 0.0) + float(row[value_key])
-    return totals
 
 
 def _df_to_sheet(

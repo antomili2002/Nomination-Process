@@ -112,19 +112,14 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         selectedMachines: null,
         evMonthly: payload.ev_monthly,
         evDeltas:  payload.ev_deltas,
-        evMachineDeltas: payload.ev_machine_deltas,
         ivMonthly: payload.iv_monthly,
         ivDeltas:  payload.iv_deltas,
-        ivMachineDeltas: payload.iv_machine_deltas,
         ppMonthly: payload.pp_monthly,
         ppDeltas:  payload.pp_deltas,
-        ppMachineDeltas: payload.pp_machine_deltas,
         ivHeatMonthly: payload.iv_heat_monthly,
         ivHeatDeltas:  payload.iv_heat_deltas,
-        ivHeatMachineDeltas: payload.iv_heat_machine_deltas,
         heatProdMonthly: payload.heat_prod_monthly,
         heatProdDeltas:  payload.heat_prod_deltas,
-        heatProdMachineDeltas: payload.heat_prod_machine_deltas,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Report generation failed.')

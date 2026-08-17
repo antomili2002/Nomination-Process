@@ -102,34 +102,6 @@ def test_generate_report_reuses_monthly_aggregations(
     assert len(calls) == len(set(calls))
 
 
-def test_generate_report_uses_prepared_machine_yearly_aggregations(
-    monkeypatch, sample_workbook_path
-):
-    info_df, raw_data_df = read_workbook_sheets(sample_workbook_path)
-    workbook = WorkbookData(
-        info_df=info_df,
-        raw_data_df=raw_data_df,
-        clean_data_df=clean_data(raw_data_df),
-        scenarios_df=extract_scenarios(info_df),
-        machines=["MACHINE_A"],
-    )
-
-    def fail_if_recomputed_from_source(*_args, **_kwargs):
-        raise AssertionError("machine yearly delta recomputed from source data")
-
-    monkeypatch.setattr(
-        report_builder,
-        "compute_machine_yearly_delta",
-        fail_if_recomputed_from_source,
-    )
-
-    result = report_service.generate_report_from_workbook(
-        workbook, "upload-1", _IV_CHAIN, _EV_CHAIN, selected_machines=None
-    )
-
-    assert result["ev_machine_deltas"][0]["delta_total"] == 3200.0
-
-
 def _upload_file(content: bytes) -> UploadFile:
     return UploadFile(filename="sample.xlsx", file=io.BytesIO(content))
 

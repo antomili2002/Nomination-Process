@@ -1,6 +1,6 @@
 import React from 'react'
 import type { PivotTableData } from '../PivotTable'
-import type { MachineYearlyDeltaTable, YearlyDeltaTable } from '../../types/report'
+import type { YearlyDeltaTable } from '../../types/report'
 
 function fmtN(v: number): string {
   if (Math.abs(v) < 0.005) return '\u2014'
@@ -114,81 +114,6 @@ export function YearlyDeltaSection({ tables, metric }: { tables: YearlyDeltaTabl
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-export function MachineYearlyDeltaSection({ tables, metric }: { tables: MachineYearlyDeltaTable[]; metric: string }) {
-  if (tables.length === 0)
-    return <p style={{ color: 'var(--clr-text-muted)', fontStyle: 'italic' }}>No data available.</p>
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
-      {tables.map((t, ti) => {
-        const machineNames = [...new Set(t.rows.map(r => r.machine_name))].sort()
-        const machineTotals = machineNames.map(machineName => {
-          const rows = t.rows.filter(r => r.machine_name === machineName)
-          return {
-            machineName,
-            rows,
-            leftTotal: rows.reduce((sum, r) => sum + r.left_value, 0),
-            rightTotal: rows.reduce((sum, r) => sum + r.right_value, 0),
-            deltaTotal: rows.reduce((sum, r) => sum + r.delta, 0),
-          }
-        })
-
-        return (
-          <div key={ti}>
-            <PairBadge pairType={t.pair_type} stepNumber={t.step_number} rightName={t.right_name} leftName={t.left_name} />
-            <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
-              <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...TH, textAlign: 'left', minWidth: 260 }}>Row Labels</th>
-                    <th style={{ ...TH, minWidth: 140 }}>{t.left_name}</th>
-                    <th style={{ ...TH, minWidth: 140 }}>{t.right_name}</th>
-                    <th style={{ ...TH, minWidth: 140 }}>Dif of {metric}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {machineTotals.map(({ machineName, rows, leftTotal, rightTotal, deltaTotal }, mi) => {
-                    const machineDif = fmtDif(deltaTotal)
-                    return (
-                      <React.Fragment key={machineName}>
-                        <tr style={{ background: mi % 2 === 0 ? '#f3f7fb' : '#eef4fa', fontWeight: 700 }}>
-                          <td style={{ ...TDL, paddingLeft: 10 }}>{machineName}</td>
-                          <td style={{ ...TD, fontWeight: 700 }}>{fmtY(leftTotal)}</td>
-                          <td style={{ ...TD, fontWeight: 700 }}>{fmtY(rightTotal)}</td>
-                          <td style={{ ...TD, fontWeight: 700, color: machineDif.color }}>{machineDif.text}</td>
-                        </tr>
-                        {rows.map((row, ri) => {
-                          const { text, color } = fmtDif(row.delta)
-                          return (
-                            <tr key={`${machineName}-${row.year}`} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
-                              <td style={{ ...TDL, paddingLeft: 28 }}>{row.year}</td>
-                              <td style={TD}>{fmtY(row.left_value)}</td>
-                              <td style={TD}>{fmtY(row.right_value)}</td>
-                              <td style={{ ...TD, color }}>{text}</td>
-                            </tr>
-                          )
-                        })}
-                      </React.Fragment>
-                    )
-                  })}
-                  <tr style={{ background: '#b8cce4', fontWeight: 700, borderTop: '2px solid #8ea9d8' }}>
-                    <td style={{ ...TDL, paddingLeft: 10 }}>Grand Total</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.left_total)}</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{fmtY(t.right_total)}</td>
-                    <td style={{ ...TD, fontWeight: 700, color: t.delta_total < 0 ? '#c0392b' : 'var(--clr-blue)' }}>
-                      {fmtDif(t.delta_total).text}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )
-      })}
     </div>
   )
 }

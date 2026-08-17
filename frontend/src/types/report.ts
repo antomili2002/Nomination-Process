@@ -7,10 +7,6 @@ export interface YearlyDeltaRow {
   delta: number
 }
 
-export interface MachineYearlyDeltaRow extends YearlyDeltaRow {
-  machine_name: string
-}
-
 export interface YearlyDeltaTable {
   left_name: string
   right_name: string
@@ -22,10 +18,6 @@ export interface YearlyDeltaTable {
   delta_total: number
 }
 
-export interface MachineYearlyDeltaTable extends Omit<YearlyDeltaTable, 'rows'> {
-  rows: MachineYearlyDeltaRow[]
-}
-
 export interface ReportData {
   reportId: string
   uploadId: string
@@ -35,17 +27,13 @@ export interface ReportData {
   selectedMachines: string[] | null
   evMonthly: PivotTableData[]
   evDeltas: YearlyDeltaTable[]
-  evMachineDeltas: MachineYearlyDeltaTable[]
   ivMonthly: PivotTableData[]
   ivDeltas: YearlyDeltaTable[]
-  ivMachineDeltas: MachineYearlyDeltaTable[]
   ppMonthly: PivotTableData[]
   ppDeltas: YearlyDeltaTable[]
-  ppMachineDeltas: MachineYearlyDeltaTable[]
   ivHeatMonthly: PivotTableData[]
   ivHeatDeltas: YearlyDeltaTable[]
-  ivHeatMachineDeltas: MachineYearlyDeltaTable[]
   heatProdMonthly: PivotTableData[]
   heatProdDeltas: YearlyDeltaTable[]
-  heatProdMachineDeltas: MachineYearlyDeltaTable[]
 }
+

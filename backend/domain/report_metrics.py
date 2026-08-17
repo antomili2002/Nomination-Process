@@ -23,7 +23,6 @@ class ReportMetric:
     chain_kind: ChainKind
     monthly_field: str
     deltas_field: str
-    machine_deltas_field: str
     excel_prefix: str
 
 
@@ -36,7 +35,6 @@ REPORT_METRICS: tuple[ReportMetric, ...] = (
         chain_kind="ev",
         monthly_field="ev_monthly",
         deltas_field="ev_deltas",
-        machine_deltas_field="ev_machine_deltas",
         excel_prefix="EV",
     ),
     ReportMetric(
@@ -47,7 +45,6 @@ REPORT_METRICS: tuple[ReportMetric, ...] = (
         chain_kind="iv",
         monthly_field="iv_monthly",
         deltas_field="iv_deltas",
-        machine_deltas_field="iv_machine_deltas",
         excel_prefix="IV",
     ),
     ReportMetric(
@@ -58,7 +55,6 @@ REPORT_METRICS: tuple[ReportMetric, ...] = (
         chain_kind="iv",
         monthly_field="pp_monthly",
         deltas_field="pp_deltas",
-        machine_deltas_field="pp_machine_deltas",
         excel_prefix="PP",
     ),
     ReportMetric(
@@ -69,7 +65,6 @@ REPORT_METRICS: tuple[ReportMetric, ...] = (
         chain_kind="iv",
         monthly_field="iv_heat_monthly",
         deltas_field="iv_heat_deltas",
-        machine_deltas_field="iv_heat_machine_deltas",
         excel_prefix="IV_Heat",
     ),
     ReportMetric(
@@ -80,7 +75,6 @@ REPORT_METRICS: tuple[ReportMetric, ...] = (
         chain_kind="iv",
         monthly_field="heat_prod_monthly",
         deltas_field="heat_prod_deltas",
-        machine_deltas_field="heat_prod_machine_deltas",
         excel_prefix="Heat_Prod",
     ),
 )

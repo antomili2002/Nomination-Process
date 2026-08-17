@@ -14,7 +14,6 @@ def test_report_metric_payload_fields_are_unique():
         fields.extend([
             metric.monthly_field,
             metric.deltas_field,
-            metric.machine_deltas_field,
         ])
     assert len(fields) == len(set(fields))
 

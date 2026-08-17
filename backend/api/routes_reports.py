@@ -16,8 +16,6 @@ from backend.api.schemas import (
     DataPreviewResponse,
     DeltaPairInfo,
     GenerateReportResponse,
-    MachineYearlyDeltaRow,
-    MachineYearlyDeltaTable,
     PivotRow,
     PivotTable,
     ReportGenerationRequest,
@@ -68,21 +66,6 @@ def _to_yearly_delta_tables(raw_list: list[dict]) -> list[YearlyDeltaTable]:
         for d in raw_list
     ]
 
-
-def _to_machine_yearly_delta_tables(raw_list: list[dict]) -> list[MachineYearlyDeltaTable]:
-    return [
-        MachineYearlyDeltaTable(
-            left_name=d["left_name"],
-            right_name=d["right_name"],
-            pair_type=d["pair_type"],
-            step_number=d["step_number"],
-            rows=[MachineYearlyDeltaRow(**r) for r in d["rows"]],
-            left_total=d["left_total"],
-            right_total=d["right_total"],
-            delta_total=d["delta_total"],
-        )
-        for d in raw_list
-    ]
 
 # Endpoints
 @router.post("/preview-chain", response_model=ChainPreviewResponse)
@@ -139,17 +122,12 @@ def generate_report(body: ReportGenerationRequest):
         upload_id=result["upload_id"],
         ev_monthly=_to_pivot_tables(result["ev_monthly"]),
         ev_deltas=_to_yearly_delta_tables(result["ev_deltas"]),
-        ev_machine_deltas=_to_machine_yearly_delta_tables(result["ev_machine_deltas"]),
         iv_monthly=_to_pivot_tables(result["iv_monthly"]),
         iv_deltas=_to_yearly_delta_tables(result["iv_deltas"]),
-        iv_machine_deltas=_to_machine_yearly_delta_tables(result["iv_machine_deltas"]),
         pp_monthly=_to_pivot_tables(result["pp_monthly"]),
         pp_deltas=_to_yearly_delta_tables(result["pp_deltas"]),
-        pp_machine_deltas=_to_machine_yearly_delta_tables(result["pp_machine_deltas"]),
         iv_heat_monthly=_to_pivot_tables(result["iv_heat_monthly"]),
         iv_heat_deltas=_to_yearly_delta_tables(result["iv_heat_deltas"]),
-        iv_heat_machine_deltas=_to_machine_yearly_delta_tables(result["iv_heat_machine_deltas"]),
         heat_prod_monthly=_to_pivot_tables(result["heat_prod_monthly"]),
         heat_prod_deltas=_to_yearly_delta_tables(result["heat_prod_deltas"]),
-        heat_prod_machine_deltas=_to_machine_yearly_delta_tables(result["heat_prod_machine_deltas"]),
     )
