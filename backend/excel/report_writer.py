@@ -13,6 +13,8 @@ from typing import Optional
 import pandas as pd
 import xlsxwriter
 
+from backend.domain.layout import LAYOUT_NON_UK, LAYOUT_UK
+
 _COLOR_BLUE = "#C0E6F5"
 _NUM_FMT = "#,##0"
 _ALL_MONTHS = list(range(1, 13))  # 1..12
@@ -31,28 +33,10 @@ def write_report(
         wb = xlsxwriter.Workbook(tmp_path, {"constant_memory": True})
         formats = _create_formats(wb)
 
-        if report_data.get("layout", "uk") == "non_uk":
+        if report_data.get("layout", LAYOUT_UK) == LAYOUT_NON_UK:
             _write_non_uk_sheets(wb, report_data["non_uk_sections"], formats)
         else:
-            used_prefixes: set[str] = set()
-            for metric in report_data["metrics"]:
-                prefix = _unique_prefix(metric["excel_prefix"], used_prefixes)
-                _write_monthly_sheet(
-                    wb,
-                    f"{prefix}_month",
-                    metric["monthly"],
-                    metric["column"],
-                    metric["output_type"],
-                    formats,
-                )
-                _write_delta_sheet(
-                    wb,
-                    f"{prefix}_sheet",
-                    metric["deltas"],
-                    metric["column"],
-                    metric["output_type"],
-                    formats,
-                )
+            _write_uk_metric_sheets(wb, report_data["metrics"], formats)
 
         _df_to_sheet(wb, "Info", info_df, write_header=False, formats=formats)
         _df_to_sheet(wb, "Data", data_df, write_header=True, formats=formats)
@@ -64,6 +48,33 @@ def write_report(
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+def _write_uk_metric_sheets(
+    wb: xlsxwriter.Workbook,
+    metrics: list[dict],
+    formats: dict,
+) -> None:
+    """Write one monthly + one delta sheet per metric for the UK layout."""
+    used_prefixes: set[str] = set()
+    for metric in metrics:
+        prefix = _unique_prefix(metric["excel_prefix"], used_prefixes)
+        _write_monthly_sheet(
+            wb,
+            f"{prefix}_month",
+            metric["monthly"],
+            metric["column"],
+            metric["output_type"],
+            formats,
+        )
+        _write_delta_sheet(
+            wb,
+            f"{prefix}_sheet",
+            metric["deltas"],
+            metric["column"],
+            metric["output_type"],
+            formats,
+        )
 
 
 def _unique_prefix(prefix: str, used: set[str]) -> str:

@@ -57,6 +57,7 @@ backend/
 │   └── exceptions.py           # 5 domain exceptions -> HTTP status codes
 ├── domain/                     # Frozen dataclasses (data, no behaviour)
 │   ├── workbook.py             # ScenarioInfo, UploadedWorkbook, WorkbookData
+│   ├── layout.py               # LAYOUT_UK/LAYOUT_NON_UK + layout_for_country()
 │   └── report_metrics.py       # ReportMetric, curated metrics, dynamic discovery
 ├── services/                   # Orchestrators (coordinate processing + storage)
 │   ├── upload_service.py       # process_upload(): read→clean→detect→persist
@@ -337,6 +338,13 @@ Other Metrics   ← (fallback)
 6. **Branches on `portfolio_country`:**
    - non-UK → `build_non_uk_category_sections(...)`, `metrics=[]`, `layout="non_uk"`.
    - UK → per-metric `build_metric_report(...)`, `non_uk_sections=[]`, `layout="uk"`.
+
+> The country → layout mapping is centralized in `domain/layout.py`
+> (`layout_for_country`), and both the service and the Excel writer dispatch on
+> the shared `LAYOUT_UK` / `LAYOUT_NON_UK` constants. `generate_report_from_workbook`
+> builds a shared `_ChainContext` once (validated chains, delta pairs, aggregation
+> cache) and delegates to `_build_uk_metric_sections` or `_build_non_uk_sections`;
+> a new layout is added by writing a builder + one dispatch branch.
 
 ### Chains & delta pairs — `processing/chain_builder.py`
 A chain is an ordered list of scenario indices: `chain[0]` = base, `chain[-1]` =
