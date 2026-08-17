@@ -30,6 +30,7 @@ def test_process_upload_returns_metadata_and_persists_processed_workbook(
     assert result.file_name == "sample.xlsx"
     assert len(result.scenarios) == 6
     assert result.machines == ["MACHINE_A"]
+    assert {m.key for m in result.available_metrics} == {"ev", "iv", "pp", "iv_heat", "heat_prod"}
 
     loaded = load_workbook_data(upload_dir / result.upload_id)
     assert loaded.clean_data_df["SCENARIO_NAME"].tolist()[0] == "Base_IV"

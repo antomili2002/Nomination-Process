@@ -13,8 +13,6 @@ from typing import Optional
 import pandas as pd
 import xlsxwriter
 
-from backend.domain.report_metrics import REPORT_METRICS
-
 _COLOR_BLUE = "#C0E6F5"
 _NUM_FMT = "#,##0"
 _ALL_MONTHS = list(range(1, 13))  # 1..12
@@ -33,21 +31,23 @@ def write_report(
         wb = xlsxwriter.Workbook(tmp_path, {"constant_memory": True})
         formats = _create_formats(wb)
 
-        for metric in REPORT_METRICS:
+        used_prefixes: set[str] = set()
+        for metric in report_data["metrics"]:
+            prefix = _unique_prefix(metric["excel_prefix"], used_prefixes)
             _write_monthly_sheet(
                 wb,
-                f"{metric.excel_prefix}_month",
-                report_data[metric.monthly_field],
-                metric.column,
-                metric.output_type,
+                f"{prefix}_month",
+                metric["monthly"],
+                metric["column"],
+                metric["output_type"],
                 formats,
             )
             _write_delta_sheet(
                 wb,
-                f"{metric.excel_prefix}_sheet",
-                report_data[metric.deltas_field],
-                metric.column,
-                metric.output_type,
+                f"{prefix}_sheet",
+                metric["deltas"],
+                metric["column"],
+                metric["output_type"],
                 formats,
             )
 
@@ -61,6 +61,17 @@ def write_report(
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+def _unique_prefix(prefix: str, used: set[str]) -> str:
+    """Guard against Excel sheet-name collisions between dynamically discovered metrics."""
+    candidate = prefix
+    suffix = 2
+    while candidate in used:
+        candidate = f"{prefix}{suffix}"
+        suffix += 1
+    used.add(candidate)
+    return candidate
 
 
 def _create_formats(wb: xlsxwriter.Workbook) -> dict[str, xlsxwriter.format.Format]:

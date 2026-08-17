@@ -1,8 +1,19 @@
-﻿import React, { useRef, useState } from 'react'
+﻿import React, { useMemo, useRef, useState } from 'react'
 import type { UploadContext, ScenarioRow, ReportData } from '../App'
 import { buildApiUrl } from '../api'
 import { buildInitialChains } from './scenarioChains'
 import type { ChainState } from './scenarioChains'
+import type { MetricInfo } from '../types/report'
+
+function groupMetricsByCategory(metrics: MetricInfo[]): [string, MetricInfo[]][] {
+  const groups = new Map<string, MetricInfo[]>()
+  for (const m of metrics) {
+    const list = groups.get(m.category)
+    if (list) list.push(m)
+    else groups.set(m.category, [m])
+  }
+  return [...groups.entries()]
+}
 
 interface Props {
   uploadCtx: UploadContext
@@ -35,9 +46,13 @@ type DragSrc =
   | { kind: 'chain-item'; chain: 'iv' | 'ev'; pos: number }
 
 export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
-  const { scenarios, machines, uploadId, fileName } = uploadCtx
+  const { scenarios, machines, uploadId, fileName, availableMetrics } = uploadCtx
 
   const [chains, setChains] = useState<ChainState>(() => buildInitialChains(scenarios))
+  const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(
+    () => new Set(availableMetrics.filter(m => m.defaultSelected).map(m => m.key))
+  )
+  const metricsByCategory = useMemo(() => groupMetricsByCategory(availableMetrics), [availableMetrics])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -83,6 +98,15 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
     setChains(prev => ({ ...prev, [chain]: prev[chain].filter((_, i) => i !== pos) }))
   }
 
+  function toggleMetric(key: string) {
+    setSelectedMetrics(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) { if (next.size > 1) next.delete(key) }
+      else next.add(key)
+      return next
+    })
+  }
+
   async function handleGenerate() {
     setLoading(true)
     setError(null)
@@ -92,6 +116,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         iv_chain: chains.iv,
         ev_chain: chains.ev,
         selected_machines: null,
+        selected_metrics: [...selectedMetrics],
       }
       const res = await fetch(buildApiUrl('/reports/generate'), {
         method: 'POST',
@@ -110,16 +135,8 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         evChain:         chains.ev,
         machines:        machines,
         selectedMachines: null,
-        evMonthly: payload.ev_monthly,
-        evDeltas:  payload.ev_deltas,
-        ivMonthly: payload.iv_monthly,
-        ivDeltas:  payload.iv_deltas,
-        ppMonthly: payload.pp_monthly,
-        ppDeltas:  payload.pp_deltas,
-        ivHeatMonthly: payload.iv_heat_monthly,
-        ivHeatDeltas:  payload.iv_heat_deltas,
-        heatProdMonthly: payload.heat_prod_monthly,
-        heatProdDeltas:  payload.heat_prod_deltas,
+        selectedMetrics: [...selectedMetrics],
+        metrics: payload.metrics,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Report generation failed.')
@@ -313,6 +330,46 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         })}
       </div>
 
+      {/* Metric selection — dynamic based on the columns found in the uploaded file */}
+      <div className="card">
+        <div style={{ marginBottom: 'var(--sp-3)' }}>
+          <p className="section-label">Metrics to include</p>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)' }}>
+            Detected from the uploaded file, grouped by category. Only selected metrics get monthly and yearly delta tables.
+          </p>
+        </div>
+        {availableMetrics.length === 0 ? (
+          <p style={{ color: 'var(--clr-text-muted)', fontSize: 'var(--text-sm)' }}>
+            No known metric columns were found in this file.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+            {metricsByCategory.map(([category, metrics]) => (
+              <div key={category}>
+                <p style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--clr-text-muted)', marginBottom: 'var(--sp-2)' }}>
+                  {category}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-3)' }}>
+                  {metrics.map(m => (
+                    <label
+                      key={m.key}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-sm)', cursor: 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMetrics.has(m.key)}
+                        onChange={() => toggleMetric(m.key)}
+                      />
+                      {m.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {error && <div className="alert alert--error" role="alert">{error}</div>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-4)' }}>
@@ -320,7 +377,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
         <button
           className="btn btn--primary btn--lg"
           onClick={handleGenerate}
-          disabled={loading || chains.iv.length < 2 || chains.ev.length < 2}
+          disabled={loading || chains.iv.length < 2 || chains.ev.length < 2 || selectedMetrics.size === 0}
         >
           {loading
             ? <><span className="spinner spinner--sm" aria-hidden="true" />Generating…</>

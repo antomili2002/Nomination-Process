@@ -43,7 +43,8 @@ def test_generate_report_uses_processed_upload_artifacts(
     )
 
     assert result["upload_id"] == uploaded.upload_id
-    assert result["ev_deltas"][0]["delta_total"] == 3200.0
+    ev_metric = next(m for m in result["metrics"] if m["key"] == "ev")
+    assert ev_metric["deltas"][0]["delta_total"] == 3200.0
 
 
 def test_export_uses_processed_upload_artifacts(monkeypatch, sample_workbook_bytes):

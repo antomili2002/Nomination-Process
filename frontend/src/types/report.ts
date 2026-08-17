@@ -18,6 +18,22 @@ export interface YearlyDeltaTable {
   delta_total: number
 }
 
+export interface MetricInfo {
+  key: string
+  label: string
+  column: string
+  category: string
+  defaultSelected: boolean
+}
+
+export interface MetricSection {
+  key: string
+  label: string
+  column: string
+  monthly: PivotTableData[]
+  deltas: YearlyDeltaTable[]
+}
+
 export interface ReportData {
   reportId: string
   uploadId: string
@@ -25,15 +41,7 @@ export interface ReportData {
   evChain: number[]
   machines: string[]
   selectedMachines: string[] | null
-  evMonthly: PivotTableData[]
-  evDeltas: YearlyDeltaTable[]
-  ivMonthly: PivotTableData[]
-  ivDeltas: YearlyDeltaTable[]
-  ppMonthly: PivotTableData[]
-  ppDeltas: YearlyDeltaTable[]
-  ivHeatMonthly: PivotTableData[]
-  ivHeatDeltas: YearlyDeltaTable[]
-  heatProdMonthly: PivotTableData[]
-  heatProdDeltas: YearlyDeltaTable[]
+  selectedMetrics: string[]
+  metrics: MetricSection[]
 }
 

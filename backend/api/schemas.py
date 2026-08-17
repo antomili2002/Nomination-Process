@@ -13,11 +13,20 @@ class ScenarioInfoRow(BaseModel):
     role: Optional[str] = None
 
 
+class MetricInfo(BaseModel):
+    key: str
+    label: str
+    column: str
+    category: str
+    default_selected: bool
+
+
 class UploadResponse(BaseModel):
     upload_id: str
     file_name: str
     scenarios: list[ScenarioInfoRow]
     machines: list[str]
+    available_metrics: list[MetricInfo]
 
 
 class ReportGenerationRequest(BaseModel):
@@ -25,6 +34,7 @@ class ReportGenerationRequest(BaseModel):
     iv_chain: list[int] = Field(..., min_length=2)
     ev_chain: list[int] = Field(..., min_length=2)
     selected_machines: Optional[list[str]] = None
+    selected_metrics: Optional[list[str]] = None
 
 
 class DeltaPairInfo(BaseModel):
@@ -101,16 +111,15 @@ class YearlyDeltaTable(BaseModel):
     delta_total: float               # right_total − left_total
 
 
+class MetricReportSection(BaseModel):
+    key: str
+    label: str
+    column: str
+    monthly: list[PivotTable]
+    deltas:  list[YearlyDeltaTable]
+
+
 class GenerateReportResponse(BaseModel):
     report_id: str
     upload_id: str
-    ev_monthly: list[PivotTable]
-    ev_deltas:  list[YearlyDeltaTable]
-    iv_monthly: list[PivotTable]
-    iv_deltas:  list[YearlyDeltaTable]
-    pp_monthly: list[PivotTable]
-    pp_deltas:  list[YearlyDeltaTable]
-    iv_heat_monthly: list[PivotTable]
-    iv_heat_deltas:  list[YearlyDeltaTable]
-    heat_prod_monthly: list[PivotTable]
-    heat_prod_deltas:  list[YearlyDeltaTable]
+    metrics: list[MetricReportSection]

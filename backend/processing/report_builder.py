@@ -47,10 +47,10 @@ def build_metric_preview(
     cache: ReportAggregationCache | None = None,
 ) -> dict[str, list[dict]]:
     return {
-        metric.monthly_field: build_monthly_tables(
+        "monthly": build_monthly_tables(
             data_df, chain_indices, metric, index_to_name, selected_machines, cache
         ),
-        metric.deltas_field: build_monthly_delta_tables(
+        "deltas": build_monthly_delta_tables(
             data_df, pairs, metric, selected_machines, cache
         ),
     }
@@ -66,10 +66,10 @@ def build_metric_report(
     cache: ReportAggregationCache | None = None,
 ) -> dict[str, list[dict]]:
     return {
-        metric.monthly_field: build_monthly_tables(
+        "monthly": build_monthly_tables(
             data_df, chain_indices, metric, index_to_name, selected_machines, cache
         ),
-        metric.deltas_field: build_yearly_delta_tables(
+        "deltas": build_yearly_delta_tables(
             data_df, pairs, metric, selected_machines, cache
         ),
     }

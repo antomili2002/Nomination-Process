@@ -17,7 +17,7 @@ from typing import Optional
 import pandas as pd
 
 from backend.core.config import settings
-from backend.domain.report_metrics import REPORT_METRICS, ReportMetric
+from backend.domain.report_metrics import REPORT_METRICS, ReportMetric, available_metrics
 from backend.domain.workbook import WorkbookData
 from backend.processing.chain_builder import DeltaPair, build_delta_pairs, validate_chain
 from backend.processing.report_builder import (
@@ -52,6 +52,18 @@ def _pairs_for_metric(
     ev_pairs: list[DeltaPair],
 ) -> list[DeltaPair]:
     return ev_pairs if metric.chain_kind == "ev" else iv_pairs
+
+
+# DataPreviewResponse still has one fixed field pair per curated metric — this
+# endpoint is a live chain-configuration preview, not the dynamic metric
+# selection flow, so it intentionally stays scoped to the curated 5.
+_PREVIEW_FIELD_NAMES: dict[str, tuple[str, str]] = {
+    "ev":        ("ev_monthly", "ev_deltas"),
+    "iv":        ("iv_monthly", "iv_deltas"),
+    "pp":        ("pp_monthly", "pp_deltas"),
+    "iv_heat":   ("iv_heat_monthly", "iv_heat_deltas"),
+    "heat_prod": ("heat_prod_monthly", "heat_prod_deltas"),
+}
 
 
 # Public service functions
@@ -107,7 +119,7 @@ def preview_data_from_workbook(
     cache = ReportAggregationCache(data_df, selected_machines)
     result: dict = {"available_machines": build_available_machines(data_df)}
     for metric in REPORT_METRICS:
-        result.update(build_metric_preview(
+        tables = build_metric_preview(
             data_df=data_df,
             chain_indices=_chain_for_metric(metric, iv_chain, ev_chain),
             pairs=_pairs_for_metric(metric, iv_pairs, ev_pairs),
@@ -115,7 +127,10 @@ def preview_data_from_workbook(
             index_to_name=index_to_name,
             selected_machines=selected_machines,
             cache=cache,
-        ))
+        )
+        monthly_field, deltas_field = _PREVIEW_FIELD_NAMES[metric.key]
+        result[monthly_field] = tables["monthly"]
+        result[deltas_field] = tables["deltas"]
     return result
 
 
@@ -124,6 +139,7 @@ def generate_report(
     iv_chain: list[int],
     ev_chain: list[int],
     selected_machines: Optional[list[str]],
+    selected_metrics: Optional[list[str]] = None,
 ) -> dict:
     """Compute all monthly and yearly-delta tables for the configured chains.
 
@@ -132,7 +148,7 @@ def generate_report(
     """
     workbook = _load_workbook_data(upload_id)
     return generate_report_from_workbook(
-        workbook, upload_id, iv_chain, ev_chain, selected_machines
+        workbook, upload_id, iv_chain, ev_chain, selected_machines, selected_metrics
     )
 
 
@@ -142,7 +158,15 @@ def generate_report_from_workbook(
     iv_chain: list[int],
     ev_chain: list[int],
     selected_machines: Optional[list[str]],
+    selected_metrics: Optional[list[str]] = None,
 ) -> dict:
+    """Build the report payload.
+
+    ``result["metrics"]`` is a list of per-metric dicts (key, label, column,
+    output_type, excel_prefix, monthly, deltas) covering every metric the
+    caller selected (or every metric available in the file, if none were
+    selected explicitly).
+    """
     data_df = workbook.clean_data_df
     index_to_name = _build_index_map(workbook.scenarios_df)
     available = set(index_to_name)
@@ -153,12 +177,15 @@ def generate_report_from_workbook(
     iv_pairs = build_delta_pairs(iv_chain, index_to_name)
     ev_pairs = build_delta_pairs(ev_chain, index_to_name)
     cache = ReportAggregationCache(data_df, selected_machines)
-    result: dict = {
-        "report_id":  str(uuid.uuid4()),
-        "upload_id":  upload_id,
-    }
-    for metric in REPORT_METRICS:
-        result.update(build_metric_report(
+
+    metrics_to_build = available_metrics(data_df)
+    if selected_metrics is not None:
+        selected_set = set(selected_metrics)
+        metrics_to_build = tuple(m for m in metrics_to_build if m.key in selected_set)
+
+    metric_results = []
+    for metric in metrics_to_build:
+        tables = build_metric_report(
             data_df=data_df,
             chain_indices=_chain_for_metric(metric, iv_chain, ev_chain),
             pairs=_pairs_for_metric(metric, iv_pairs, ev_pairs),
@@ -166,5 +193,19 @@ def generate_report_from_workbook(
             index_to_name=index_to_name,
             selected_machines=selected_machines,
             cache=cache,
-        ))
-    return result
+        )
+        metric_results.append({
+            "key": metric.key,
+            "label": metric.label,
+            "column": metric.column,
+            "output_type": metric.output_type,
+            "excel_prefix": metric.excel_prefix,
+            "monthly": tables["monthly"],
+            "deltas": tables["deltas"],
+        })
+
+    return {
+        "report_id":  str(uuid.uuid4()),
+        "upload_id":  upload_id,
+        "metrics":    metric_results,
+    }

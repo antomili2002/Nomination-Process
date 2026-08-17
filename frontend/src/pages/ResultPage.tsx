@@ -2,16 +2,7 @@
 import { Download, FilePlus2, SlidersHorizontal } from 'lucide-react'
 import { buildApiUrl } from '../api'
 import type { ReportData } from '../types/report'
-import type { PivotTableData } from '../components/PivotTable'
-import {
-  getMonthlyTables,
-  getSection,
-  getSectionCount,
-  getYearlyDeltas,
-  REPORT_GROUPS,
-  SECTIONS,
-  type SectionId,
-} from '../reportMetrics'
+import { buildSections, findMetric, sectionCount } from '../reportMetrics'
 import {
   ExcelPivotSection,
   YearlyDeltaSection,
@@ -36,25 +27,20 @@ function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
     evChain:         base.evChain,
     machines:        base.machines,
     selectedMachines: base.selectedMachines,  // overwritten by caller
-    evMonthly: p.ev_monthly as PivotTableData[],
-    evDeltas:  p.ev_deltas  as ReportData['evDeltas'],
-    ivMonthly: p.iv_monthly as PivotTableData[],
-    ivDeltas:  p.iv_deltas  as ReportData['ivDeltas'],
-    ppMonthly: p.pp_monthly as PivotTableData[],
-    ppDeltas:  p.pp_deltas  as ReportData['ppDeltas'],
-    ivHeatMonthly: p.iv_heat_monthly as PivotTableData[],
-    ivHeatDeltas:  p.iv_heat_deltas as ReportData['ivHeatDeltas'],
-    heatProdMonthly: p.heat_prod_monthly as PivotTableData[],
-    heatProdDeltas:  p.heat_prod_deltas as ReportData['heatProdDeltas'],
+    selectedMetrics: base.selectedMetrics,
+    metrics: p.metrics as ReportData['metrics'],
   }
 }
 
 export function ResultPage({ reportData, onReset }: Props) {
-  const { uploadId, ivChain, evChain, machines } = reportData
+  const { uploadId, ivChain, evChain, machines, selectedMetrics } = reportData
+
+  // Metric structure (key/label/column) is stable across machine-filter recomputes.
+  const sections = buildSections(reportData.metrics)
 
   // -- Section navigation ---------------------------------------------------
-  const [activeId, setActiveId] = useState<SectionId>('ev-monthly')
-  const activeSection = getSection(activeId)
+  const [activeId, setActiveId] = useState<string>(() => sections[0]?.id ?? '')
+  const activeSection = sections.find(s => s.id === activeId) ?? sections[0]
 
   // -- Machine filter + cache -----------------------------------------------
   // activeData is what gets rendered; initialised from the passed-in reportData.
@@ -156,7 +142,10 @@ export function ResultPage({ reportData, onReset }: Props) {
       const resp = await fetch(buildApiUrl('/reports/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ upload_id: uploadId, iv_chain: ivChain, ev_chain: evChain, selected_machines: sel }),
+        body: JSON.stringify({
+          upload_id: uploadId, iv_chain: ivChain, ev_chain: evChain,
+          selected_machines: sel, selected_metrics: selectedMetrics,
+        }),
       })
       if (!resp.ok) {
         const d = await resp.json().catch(() => ({}))
@@ -193,15 +182,15 @@ export function ResultPage({ reportData, onReset }: Props) {
           </p>
         </div>
 
-        {REPORT_GROUPS.map(group => {
-          const groupSections = SECTIONS.filter(s => s.group === group)
+        {reportData.metrics.map(metric => {
+          const groupSections = sections.filter(s => s.metricKey === metric.key)
           return (
-            <div key={group} style={{ borderBottom: '1px solid var(--clr-border)' }}>
+            <div key={metric.key} style={{ borderBottom: '1px solid var(--clr-border)' }}>
               <p style={{ margin: 0, padding: '8px 16px 4px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--clr-text-muted)' }}>
-                {group}
+                {metric.label}
               </p>
               {groupSections.map(sec => {
-                const count = getSectionCount(activeData, sec.id)
+                const count = sectionCount(activeData.metrics, sec.metricKey, sec.tableType)
                 const isActive = activeId === sec.id
                 return (
                   <button
@@ -248,11 +237,11 @@ export function ResultPage({ reportData, onReset }: Props) {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--sp-4)' }}>
           <div>
             <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-semibold)', margin: 0 }}>
-              {activeSection.group} — {activeSection.label}
+              {activeSection.metricLabel} — {activeSection.label}
             </h2>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', marginTop: 4 }}>
-              Sum of <code style={{ background: 'var(--clr-bg)', padding: '1px 4px', borderRadius: 3 }}>{activeSection.metric}</code>
-              {' · '}{getSectionCount(activeData, activeId)} table{getSectionCount(activeData, activeId) !== 1 ? 's' : ''}
+              Sum of <code style={{ background: 'var(--clr-bg)', padding: '1px 4px', borderRadius: 3 }}>{activeSection.column}</code>
+              {' · '}{sectionCount(activeData.metrics, activeSection.metricKey, activeSection.tableType)} table{sectionCount(activeData.metrics, activeSection.metricKey, activeSection.tableType) !== 1 ? 's' : ''}
               {isFiltered && (
                 <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10, background: 'var(--clr-blue-light)', color: 'var(--clr-blue)', fontWeight: 600 }}>
                   {activeMachineCount}/{machines.length} machines
@@ -379,10 +368,16 @@ export function ResultPage({ reportData, onReset }: Props) {
           )}
 
           {activeSection.tableType === 'monthly' && (
-            <ExcelPivotSection tables={getMonthlyTables(activeData, activeId)} isDelta={false} />
+            <ExcelPivotSection
+              tables={findMetric(activeData.metrics, activeSection.metricKey)?.monthly ?? []}
+              isDelta={false}
+            />
           )}
           {activeSection.tableType === 'yearlyDelta' && (
-            <YearlyDeltaSection tables={getYearlyDeltas(activeData, activeId)} metric={activeSection.metric} />
+            <YearlyDeltaSection
+              tables={findMetric(activeData.metrics, activeSection.metricKey)?.deltas ?? []}
+              metric={activeSection.column}
+            />
           )}
         </div>
       </div>

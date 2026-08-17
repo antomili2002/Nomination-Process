@@ -35,10 +35,7 @@ def test_build_metric_report_returns_all_payload_fields(clean_df):
         selected_machines=None,
     )
 
-    assert set(result) == {
-        "heat_prod_monthly",
-        "heat_prod_deltas",
-    }
+    assert set(result) == {"monthly", "deltas"}
 
 
 def test_build_metric_report_uses_metric_column_for_yearly_delta(clean_df):
@@ -54,7 +51,7 @@ def test_build_metric_report_uses_metric_column_for_yearly_delta(clean_df):
         selected_machines=None,
     )
 
-    delta = result["heat_prod_deltas"][0]
+    delta = result["deltas"][0]
     assert delta["left_total"] == pytest.approx(40.0)
     assert delta["right_total"] == pytest.approx(72.0)
     assert delta["delta_total"] == pytest.approx(32.0)
@@ -73,7 +70,7 @@ def test_build_metric_report_applies_machine_filter(clean_df):
         selected_machines=["DOES_NOT_EXIST"],
     )
 
-    delta = result["heat_prod_deltas"][0]
+    delta = result["deltas"][0]
     assert delta["delta_total"] == pytest.approx(0.0)
 
 
@@ -90,6 +87,6 @@ def test_build_metric_preview_returns_monthly_deltas_for_dashboard(clean_df):
         selected_machines=None,
     )
 
-    rows = result["heat_prod_deltas"][0]["rows"]
+    rows = result["deltas"][0]["rows"]
     assert rows[0]["values"] == [8.0, 8.0]
     assert rows[1]["values"] == [8.0, 8.0]

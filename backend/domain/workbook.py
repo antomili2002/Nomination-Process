@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from backend.domain.report_metrics import ReportMetric
+
 
 @dataclass(frozen=True)
 class ScenarioInfo:
@@ -22,6 +24,7 @@ class UploadedWorkbook:
     file_name: str
     scenarios: list[ScenarioInfo]
     machines: list[str]
+    available_metrics: list[ReportMetric]
 
 
 @dataclass(frozen=True)

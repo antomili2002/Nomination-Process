@@ -21,8 +21,8 @@ METRIC_COLS = [
     HEAT_PRODUCTION_COL,
 ]
 
-# Minimum columns required in the Data sheet
-REQUIRED_DATA_COLS = [
+# Identifier/dimension columns — never treated as a selectable metric
+DIMENSION_COLS = [
     SCENARIO_ID_COL,
     SCENARIO_NAME_COL,
     OUTPUT_TYPE_COL,
@@ -30,12 +30,10 @@ REQUIRED_DATA_COLS = [
     MONTH_COL,
     TARIFF_COL,
     MACHINE_NAME_COL,
-    POWER_POS_COL,
-    IV_COL,
-    EV_COL,
-    IV_INCL_HEAT_COSTS_COL,
-    HEAT_PRODUCTION_COL,
 ]
+
+# Minimum columns required in the Data sheet
+REQUIRED_DATA_COLS = DIMENSION_COLS + METRIC_COLS
 
 # Value in the first column of the Info sheet header row
 INFO_HEADER_SENTINEL = "Scenario Name"

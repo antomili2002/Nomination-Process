@@ -84,6 +84,19 @@ export function UploadPage({ onSuccess }: Props) {
           role: s.role,
         })),
         machines: data.machines,
+        availableMetrics: data.available_metrics.map((m: {
+          key: string
+          label: string
+          column: string
+          category: string
+          default_selected: boolean
+        }) => ({
+          key: m.key,
+          label: m.label,
+          column: m.column,
+          category: m.category,
+          defaultSelected: m.default_selected,
+        })),
       })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Upload failed.')

@@ -30,6 +30,15 @@ def _upload(workbook_bytes: bytes) -> dict:
     return resp.json()
 
 
+def _metric(data: dict, key: str) -> dict:
+    """Look up a metric section by key from a /reports/generate response."""
+    return next(m for m in data["metrics"] if m["key"] == key)
+
+
+def _metric_keys(data: dict) -> set:
+    return {m["key"] for m in data["metrics"]}
+
+
 # Conftest scenario indices (0-based, matching Info sheet order):
 #   0 Base_IV | 1 Outage_IV | 2 Final_IV
 #   3 Base_EV | 4 Outage_EV | 5 Final_EV
@@ -72,6 +81,14 @@ class TestUpload:
 
     def test_machine_list_returned(self, uploaded_module):
         assert uploaded_module["machines"] == ["MACHINE_A"]
+
+    def test_available_metrics_returned(self, uploaded_module):
+        keys = {m["key"] for m in uploaded_module["available_metrics"]}
+        assert keys == {"ev", "iv", "pp", "iv_heat", "heat_prod"}
+
+    def test_only_core_three_metrics_selected_by_default(self, uploaded_module):
+        defaults = {m["key"]: m["default_selected"] for m in uploaded_module["available_metrics"]}
+        assert defaults == {"ev": True, "iv": True, "pp": True, "iv_heat": False, "heat_prod": False}
 
     def test_rejects_non_xlsx(self):
         resp = client.post(
@@ -202,12 +219,9 @@ class TestGenerateReport:
         })
         data = resp.json()
         # base + final = 2 monthly tables per metric
-        assert len(data["ev_monthly"]) == 2
-        assert len(data["iv_monthly"]) == 2
-        assert len(data["pp_monthly"]) == 2
-        assert len(data["iv_heat_monthly"]) == 2
-        assert len(data["heat_prod_monthly"]) == 2
-        assert "heat_cost_monthly" not in data
+        for key in ("ev", "iv", "pp", "iv_heat", "heat_prod"):
+            assert len(_metric(data, key)["monthly"]) == 2
+        assert "heat_cost" not in _metric_keys(data)
 
     def test_delta_tables_count_simple_chain(self, uploaded):
         resp = client.post("/reports/generate", json={
@@ -217,12 +231,9 @@ class TestGenerateReport:
         })
         data = resp.json()
         # 2-element chain → 1 delta pair (step only, no cumulative)
-        assert len(data["ev_deltas"]) == 1
-        assert len(data["iv_deltas"]) == 1
-        assert len(data["pp_deltas"]) == 1
-        assert len(data["iv_heat_deltas"]) == 1
-        assert len(data["heat_prod_deltas"]) == 1
-        assert "heat_cost_deltas" not in data
+        for key in ("ev", "iv", "pp", "iv_heat", "heat_prod"):
+            assert len(_metric(data, key)["deltas"]) == 1
+        assert "heat_cost" not in _metric_keys(data)
 
     def test_delta_tables_count_three_step_chain(self, uploaded):
         resp = client.post("/reports/generate", json={
@@ -232,9 +243,9 @@ class TestGenerateReport:
         })
         data = resp.json()
         # 3-element chain → 2 steps + 1 cumulative = 3 delta pairs
-        assert len(data["ev_deltas"]) == 3
-        assert len(data["iv_heat_deltas"]) == 3
-        assert len(data["heat_prod_deltas"]) == 3
+        assert len(_metric(data, "ev")["deltas"]) == 3
+        assert len(_metric(data, "iv_heat")["deltas"]) == 3
+        assert len(_metric(data, "heat_prod")["deltas"]) == 3
 
     def test_new_iv_heat_metrics_use_iv_chain_values(self, uploaded):
         resp = client.post("/reports/generate", json={
@@ -243,10 +254,11 @@ class TestGenerateReport:
             "ev_chain": _EV_CHAIN_SIMPLE,
         })
         data = resp.json()
-        assert data["iv_heat_deltas"][0]["left_total"] == pytest.approx(3600.0)
-        assert data["iv_heat_deltas"][0]["right_total"] == pytest.approx(6800.0)
-        assert data["iv_heat_deltas"][0]["delta_total"] == pytest.approx(3200.0)
-        assert data["heat_prod_deltas"][0]["delta_total"] == pytest.approx(32.0)
+        iv_heat_delta = _metric(data, "iv_heat")["deltas"][0]
+        assert iv_heat_delta["left_total"] == pytest.approx(3600.0)
+        assert iv_heat_delta["right_total"] == pytest.approx(6800.0)
+        assert iv_heat_delta["delta_total"] == pytest.approx(3200.0)
+        assert _metric(data, "heat_prod")["deltas"][0]["delta_total"] == pytest.approx(32.0)
 
     def test_ev_delta_yearly_values(self, uploaded):
         """Verify the yearly aggregate numbers match known fixture values.
@@ -259,7 +271,7 @@ class TestGenerateReport:
             "iv_chain": _IV_CHAIN_SIMPLE,
             "ev_chain": _EV_CHAIN_SIMPLE,
         })
-        delta = resp.json()["ev_deltas"][0]
+        delta = _metric(resp.json(), "ev")["deltas"][0]
         assert delta["left_total"] == pytest.approx(2000.0)
         assert delta["right_total"] == pytest.approx(5200.0)
         assert delta["delta_total"] == pytest.approx(3200.0)
@@ -270,10 +282,43 @@ class TestGenerateReport:
             "iv_chain": _IV_CHAIN_SIMPLE,
             "ev_chain": _EV_CHAIN_SIMPLE,
         })
-        rows = resp.json()["ev_deltas"][0]["rows"]
+        rows = _metric(resp.json(), "ev")["deltas"][0]["rows"]
         assert len(rows) == 1
         assert rows[0]["year"] == 2026
         assert "machine_name" not in rows[0]
+
+    def test_selected_metrics_filters_returned_tables(self, uploaded):
+        resp = client.post("/reports/generate", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+            "selected_metrics": ["ev", "iv"],
+        })
+        data = resp.json()
+        assert _metric_keys(data) == {"ev", "iv"}
+        assert len(_metric(data, "ev")["monthly"]) == 2
+        assert len(_metric(data, "iv")["monthly"]) == 2
+
+    def test_selected_metrics_unknown_key_is_ignored(self, uploaded):
+        resp = client.post("/reports/generate", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+            "selected_metrics": ["ev", "not_a_real_metric"],
+        })
+        data = resp.json()
+        assert _metric_keys(data) == {"ev"}
+
+    def test_no_selected_metrics_returns_all_available(self, uploaded):
+        resp = client.post("/reports/generate", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        data = resp.json()
+        assert _metric_keys(data) == {"ev", "iv", "pp", "iv_heat", "heat_prod"}
+        for key in ("ev", "iv", "pp", "iv_heat", "heat_prod"):
+            assert len(_metric(data, key)["monthly"]) == 2
 
     def test_machine_filter_with_known_machine(self, uploaded):
         """Filtering by the only machine in the fixture yields the same totals.
@@ -286,7 +331,7 @@ class TestGenerateReport:
             "iv_chain": _IV_CHAIN_SIMPLE,
             "ev_chain": _EV_CHAIN_SIMPLE,
         })
-        totals_no_filter = resp_no_filter.json()["ev_deltas"][0]["delta_total"]
+        totals_no_filter = _metric(resp_no_filter.json(), "ev")["deltas"][0]["delta_total"]
 
         resp_filtered = client.post("/reports/generate", json={
             "upload_id": uploaded["upload_id"],
@@ -294,7 +339,7 @@ class TestGenerateReport:
             "ev_chain": _EV_CHAIN_SIMPLE,
             "selected_machines": ["MACHINE_A"],
         })
-        totals_filtered = resp_filtered.json()["ev_deltas"][0]["delta_total"]
+        totals_filtered = _metric(resp_filtered.json(), "ev")["deltas"][0]["delta_total"]
         assert totals_filtered == pytest.approx(totals_no_filter)
 
     def test_recompute_with_same_upload_id(self, uploaded):
@@ -312,8 +357,8 @@ class TestGenerateReport:
         })
         assert r2.status_code == 200
         # Values must be equal (only one machine in fixture)
-        assert r1.json()["ev_deltas"][0]["delta_total"] == pytest.approx(
-            r2.json()["ev_deltas"][0]["delta_total"]
+        assert _metric(r1.json(), "ev")["deltas"][0]["delta_total"] == pytest.approx(
+            _metric(r2.json(), "ev")["deltas"][0]["delta_total"]
         )
 
     def test_unknown_upload_returns_404(self):

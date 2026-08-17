@@ -1,59 +1,33 @@
-import type { PivotTableData } from './components/PivotTable'
-import type { ReportData, YearlyDeltaTable } from './types/report'
+import type { MetricSection } from './types/report'
 
-export type SectionId =
-  | 'ev-monthly' | 'ev-deltas'
-  | 'iv-monthly' | 'iv-deltas'
-  | 'pp-monthly' | 'pp-deltas'
-  | 'iv-heat-monthly' | 'iv-heat-deltas'
-  | 'heat-prod-monthly' | 'heat-prod-deltas'
-
-export type ReportGroup = 'EV' | 'IV' | 'Power Position' | 'IV Heat' | 'Heat Production'
 export type TableType = 'monthly' | 'yearlyDelta'
 
 export interface Section {
-  id: SectionId
+  id: string
   label: string
-  metric: string
-  group: ReportGroup
+  metricKey: string
+  metricLabel: string
+  column: string
   tableType: TableType
-  dataKey: keyof ReportData
 }
 
-export const SECTIONS: Section[] = [
-  { id: 'ev-monthly', label: 'Monthly', metric: 'EXTRINSIC_VALUE', group: 'EV', tableType: 'monthly', dataKey: 'evMonthly' },
-  { id: 'ev-deltas', label: 'Yearly Deltas', metric: 'EXTRINSIC_VALUE', group: 'EV', tableType: 'yearlyDelta', dataKey: 'evDeltas' },
-  { id: 'iv-monthly', label: 'Monthly', metric: 'INTRINSIC_VALUE__CUR', group: 'IV', tableType: 'monthly', dataKey: 'ivMonthly' },
-  { id: 'iv-deltas', label: 'Yearly Deltas', metric: 'INTRINSIC_VALUE__CUR', group: 'IV', tableType: 'yearlyDelta', dataKey: 'ivDeltas' },
-  { id: 'pp-monthly', label: 'Monthly', metric: 'POWER_POS__GWH', group: 'Power Position', tableType: 'monthly', dataKey: 'ppMonthly' },
-  { id: 'pp-deltas', label: 'Yearly Deltas', metric: 'POWER_POS__GWH', group: 'Power Position', tableType: 'yearlyDelta', dataKey: 'ppDeltas' },
-  { id: 'iv-heat-monthly', label: 'Monthly', metric: 'IV_INCL_HEAT_COSTS', group: 'IV Heat', tableType: 'monthly', dataKey: 'ivHeatMonthly' },
-  { id: 'iv-heat-deltas', label: 'Yearly Deltas', metric: 'IV_INCL_HEAT_COSTS', group: 'IV Heat', tableType: 'yearlyDelta', dataKey: 'ivHeatDeltas' },
-  { id: 'heat-prod-monthly', label: 'Monthly', metric: 'HEAT_PRODUCTION__GWH', group: 'Heat Production', tableType: 'monthly', dataKey: 'heatProdMonthly' },
-  { id: 'heat-prod-deltas', label: 'Yearly Deltas', metric: 'HEAT_PRODUCTION__GWH', group: 'Heat Production', tableType: 'yearlyDelta', dataKey: 'heatProdDeltas' },
-]
-
-export const REPORT_GROUPS: ReportGroup[] = ['EV', 'IV', 'Power Position', 'IV Heat', 'Heat Production']
-
-export function getSection(id: SectionId): Section {
-  return SECTIONS.find(s => s.id === id)!
+/** Build sidebar sections (Monthly + Yearly Deltas per metric) from a report's metrics list. */
+export function buildSections(metrics: MetricSection[]): Section[] {
+  const sections: Section[] = []
+  for (const m of metrics) {
+    sections.push({ id: `${m.key}::monthly`, label: 'Monthly', metricKey: m.key, metricLabel: m.label, column: m.column, tableType: 'monthly' })
+    sections.push({ id: `${m.key}::deltas`, label: 'Yearly Deltas', metricKey: m.key, metricLabel: m.label, column: m.column, tableType: 'yearlyDelta' })
+  }
+  return sections
 }
 
-export function getMonthlyTables(d: ReportData, id: SectionId): PivotTableData[] {
-  const section = getSection(id)
-  if (section.tableType !== 'monthly') return []
-  return d[section.dataKey] as PivotTableData[]
+export function findMetric(metrics: MetricSection[], key: string): MetricSection | undefined {
+  return metrics.find(m => m.key === key)
 }
 
-export function getYearlyDeltas(d: ReportData, id: SectionId): YearlyDeltaTable[] {
-  const section = getSection(id)
-  if (section.tableType !== 'yearlyDelta') return []
-  return d[section.dataKey] as YearlyDeltaTable[]
-}
-
-export function getSectionCount(d: ReportData, id: SectionId): number {
-  const section = getSection(id)
-  if (section.tableType === 'monthly') return getMonthlyTables(d, id).length
-  return getYearlyDeltas(d, id).length
+export function sectionCount(metrics: MetricSection[], metricKey: string, tableType: TableType): number {
+  const metric = findMetric(metrics, metricKey)
+  if (!metric) return 0
+  return tableType === 'monthly' ? metric.monthly.length : metric.deltas.length
 }
 

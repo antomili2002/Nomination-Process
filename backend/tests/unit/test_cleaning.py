@@ -100,3 +100,24 @@ def test_cleans_fixture_data_sheet(data_df):
     assert pd.api.types.is_numeric_dtype(result[YEAR_COL])
     assert pd.api.types.is_numeric_dtype(result[EV_COL])
     assert result[SCENARIO_NAME_COL].str.contains(r"^\s").sum() == 0
+
+
+def test_discovers_and_coerces_extra_numeric_column():
+    df = _df(_minimal_row(**{"TOTAL_VALUE__CUR": "1.234,56"}))
+    result = clean_data(df)
+    assert pd.api.types.is_numeric_dtype(result["TOTAL_VALUE__CUR"])
+    assert result.loc[0, "TOTAL_VALUE__CUR"] == pytest.approx(1234.56)
+
+
+def test_leaves_text_columns_untouched():
+    df = _df(_minimal_row(**{"PLANT_NAME": "RATS", "FUEL_NAME": None}))
+    result = clean_data(df)
+    assert result.loc[0, "PLANT_NAME"] == "RATS"
+    assert not pd.api.types.is_numeric_dtype(result["PLANT_NAME"])
+
+
+def test_dimension_columns_are_never_treated_as_metrics():
+    df = _df(_minimal_row(**{YEAR_COL: "2026"}))
+    result = clean_data(df)
+    # YEAR is numeric but must stay a dimension, not get fillna(0.0)-style metric handling
+    assert result.loc[0, YEAR_COL] == 2026

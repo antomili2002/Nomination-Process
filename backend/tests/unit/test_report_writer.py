@@ -189,16 +189,33 @@ def simple_report_data() -> dict:
     return {
         "report_id": "test-id",
         "upload_id": "test-upload-id",
-        "ev_monthly": ev_monthly,
-        "ev_deltas":  ev_deltas,
-        "iv_monthly": iv_monthly,
-        "iv_deltas":  iv_deltas,
-        "pp_monthly": pp_monthly,
-        "pp_deltas":  pp_deltas,
-        "iv_heat_monthly": iv_heat_monthly,
-        "iv_heat_deltas": iv_heat_deltas,
-        "heat_prod_monthly": heat_prod_monthly,
-        "heat_prod_deltas": heat_prod_deltas,
+        "metrics": [
+            {
+                "key": "ev", "label": "Extrinsic Value", "column": "EXTRINSIC_VALUE",
+                "output_type": "EV", "excel_prefix": "EV",
+                "monthly": ev_monthly, "deltas": ev_deltas,
+            },
+            {
+                "key": "iv", "label": "Intrinsic Value", "column": "INTRINSIC_VALUE__CUR",
+                "output_type": "IV", "excel_prefix": "IV",
+                "monthly": iv_monthly, "deltas": iv_deltas,
+            },
+            {
+                "key": "pp", "label": "Power Position", "column": "POWER_POS__GWH",
+                "output_type": "IV", "excel_prefix": "PP",
+                "monthly": pp_monthly, "deltas": pp_deltas,
+            },
+            {
+                "key": "iv_heat", "label": "IV incl. heat costs", "column": "IV_INCL_HEAT_COSTS",
+                "output_type": "IV", "excel_prefix": "IV_Heat",
+                "monthly": iv_heat_monthly, "deltas": iv_heat_deltas,
+            },
+            {
+                "key": "heat_prod", "label": "Heat Production", "column": "HEAT_PRODUCTION__GWH",
+                "output_type": "IV", "excel_prefix": "Heat_Prod",
+                "monthly": heat_prod_monthly, "deltas": heat_prod_deltas,
+            },
+        ],
     }
 
 

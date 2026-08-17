@@ -38,6 +38,7 @@ def export_report(body: ReportGenerationRequest):
             body.iv_chain,
             body.ev_chain,
             body.selected_machines,
+            body.selected_metrics,
         )
     except Exception as exc:
         raise _to_http(exc)

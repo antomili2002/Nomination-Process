@@ -7,6 +7,7 @@ from fastapi import UploadFile
 
 from backend.core.constants import MACHINE_NAME_COL
 from backend.core.config import settings
+from backend.domain.report_metrics import available_metrics
 from backend.domain.workbook import ScenarioInfo, UploadedWorkbook, WorkbookData
 from backend.processing.cleaning import clean_data
 from backend.processing.readers import read_workbook_sheets
@@ -38,6 +39,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
         file_name=file.filename or "upload.xlsx",
         scenarios=_to_domain_scenarios(scenarios_df),
         machines=machines,
+        available_metrics=list(available_metrics(clean_data_df)),
     )
 
 

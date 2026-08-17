@@ -16,6 +16,7 @@ from backend.api.schemas import (
     DataPreviewResponse,
     DeltaPairInfo,
     GenerateReportResponse,
+    MetricReportSection,
     PivotRow,
     PivotTable,
     ReportGenerationRequest,
@@ -112,7 +113,7 @@ def generate_report(body: ReportGenerationRequest):
     """Compute all tables for the configured chains and return the report payload."""
     try:
         result = report_service.generate_report(
-            body.upload_id, body.iv_chain, body.ev_chain, body.selected_machines
+            body.upload_id, body.iv_chain, body.ev_chain, body.selected_machines, body.selected_metrics
         )
     except Exception as exc:
         raise _to_http(exc)
@@ -120,14 +121,14 @@ def generate_report(body: ReportGenerationRequest):
     return GenerateReportResponse(
         report_id=result["report_id"],
         upload_id=result["upload_id"],
-        ev_monthly=_to_pivot_tables(result["ev_monthly"]),
-        ev_deltas=_to_yearly_delta_tables(result["ev_deltas"]),
-        iv_monthly=_to_pivot_tables(result["iv_monthly"]),
-        iv_deltas=_to_yearly_delta_tables(result["iv_deltas"]),
-        pp_monthly=_to_pivot_tables(result["pp_monthly"]),
-        pp_deltas=_to_yearly_delta_tables(result["pp_deltas"]),
-        iv_heat_monthly=_to_pivot_tables(result["iv_heat_monthly"]),
-        iv_heat_deltas=_to_yearly_delta_tables(result["iv_heat_deltas"]),
-        heat_prod_monthly=_to_pivot_tables(result["heat_prod_monthly"]),
-        heat_prod_deltas=_to_yearly_delta_tables(result["heat_prod_deltas"]),
+        metrics=[
+            MetricReportSection(
+                key=m["key"],
+                label=m["label"],
+                column=m["column"],
+                monthly=_to_pivot_tables(m["monthly"]),
+                deltas=_to_yearly_delta_tables(m["deltas"]),
+            )
+            for m in result["metrics"]
+        ],
     )

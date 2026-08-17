@@ -21,6 +21,7 @@ def create_excel_report(
     iv_chain: list[int],
     ev_chain: list[int],
     selected_machines: Optional[list[str]],
+    selected_metrics: Optional[list[str]] = None,
 ) -> tuple[bytes, str]:
     """Generate the full Excel report and return ``(excel_bytes, filename)``.
 
@@ -35,7 +36,7 @@ def create_excel_report(
     workbook = load_workbook_data(settings.upload_dir / upload_id)
 
     report_data = report_service.generate_report_from_workbook(
-        workbook, upload_id, iv_chain, ev_chain, selected_machines
+        workbook, upload_id, iv_chain, ev_chain, selected_machines, selected_metrics
     )
 
     excel_bytes = report_writer.write_report(
