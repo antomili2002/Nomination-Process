@@ -150,7 +150,12 @@ def _write_non_uk_sheets(
     sections: list[dict],
     formats: dict,
 ) -> None:
-    """Write the four non-UK views, with one table per category on each sheet."""
+    """Write the four non-UK views using the shared blue pivot styling.
+
+    Layout mirrors the dashboard (single "Row Labels" column, "Sum of" bands,
+    year/month hierarchy, "Total Sum of" rows at the end); the palette is the
+    same ``formats`` used by the UK sheets so both look identical.
+    """
     for output_type, period, sheet_name in (
         ("IV", "yearly", "IV_Yearly"),
         ("IV", "monthly", "IV_Monthly"),
@@ -159,9 +164,8 @@ def _write_non_uk_sheets(
     ):
         ws = wb.add_worksheet(sheet_name)
         ws.hide_gridlines(2)
-        ws.set_column(0, 0, 32)
-        ws.set_column(1, 2, 14)
-        ws.set_column(3, 20, 24)
+        ws.set_column(0, 0, 34)
+        ws.set_column(1, 20, 26)
 
         _w(ws, 1, 1, "OUTPUT_TYPE", formats["blue"])
         _w(ws, 1, 2, output_type, formats["blue"])
@@ -184,46 +188,107 @@ def _write_non_uk_category_table(
     section: dict,
     formats: dict,
 ) -> int:
+    """One category table: caption, header, metric groups, then total rows."""
     columns: list[dict] = section["columns"]
     rows: list[dict] = section["rows"]
     is_monthly = section["period"] == "monthly"
+    value_count = len(columns)
 
-    _w(ws, row_num, 1, section["category"], formats["bold_blue"])
-    for column_index in range(2, len(columns) + 3 + int(is_monthly)):
-        _w(ws, row_num, column_index, None, formats["blue"])
+    _w(ws, row_num, 1, section["category"], formats["bold"])
     row_num += 1
 
-    headers = ["Metric", "Year"]
-    if is_monthly:
-        headers.append("Month")
-    headers.extend(column["label"] for column in columns)
-    for column_index, header in enumerate(headers, start=1):
-        _w(ws, row_num, column_index, header, formats["bold_blue_bottom"])
+    _w(ws, row_num, 1, "Row Labels", formats["bold_blue_bottom"])
+    for index, column in enumerate(columns):
+        _w(ws, row_num, 2 + index, column["label"], formats["bold_blue_bottom"])
     row_num += 1
 
-    totals = [0.0] * len(columns)
-    for row in rows:
-        _w(ws, row_num, 1, row["metric_label"], formats["indent1"])
-        _w(ws, row_num, 2, row["year"], formats["num"])
-        value_column = 3
-        if is_monthly:
-            _w(ws, row_num, 3, row["month"], formats["num"])
-            value_column = 4
-        for index, value in enumerate(row["values"]):
-            _w(ws, row_num, value_column + index, value, formats["num"])
-            totals[index] += value
-        row_num += 1
+    groups, order = _group_rows_by_metric(rows)
 
-    if rows:
-        label_columns = 3 if is_monthly else 2
-        _w(ws, row_num, 1, f"Total {section['category']}", formats["bold_blue"])
-        for column_index in range(2, label_columns + 1):
-            _w(ws, row_num, column_index, None, formats["blue"])
-        for index, value in enumerate(totals):
-            _w(ws, row_num, label_columns + 1 + index, value, formats["bold_blue_num"])
+    for metric_key in order:
+        row_num = _write_non_uk_metric_group(
+            ws, row_num, columns, groups[metric_key], is_monthly, formats
+        )
+
+    # All "Total Sum of <metric>" rows collected at the very bottom.
+    for metric_key in order:
+        metric_rows = groups[metric_key]
+        metric_col = metric_rows[0]["metric_column"]
+        totals = [sum(r["values"][i] for r in metric_rows) for i in range(value_count)]
+        _w(ws, row_num, 1, f"Total Sum of {metric_col}", formats["bold_blue_top"])
+        for i in range(value_count):
+            _w(ws, row_num, 2 + i, totals[i], formats["bold_blue_num_top"])
         row_num += 1
 
     return row_num
+
+
+def _write_non_uk_metric_group(
+    ws: xlsxwriter.worksheet.Worksheet,
+    row_num: int,
+    columns: list[dict],
+    metric_rows: list[dict],
+    is_monthly: bool,
+    formats: dict,
+) -> int:
+    value_count = len(columns)
+    metric_col = metric_rows[0]["metric_column"]
+
+    # "Sum of <metric>" band: bold caption with a thin blue rule underneath.
+    _w(ws, row_num, 1, f"Sum of {metric_col}", formats["bold_bottom"])
+    for i in range(value_count):
+        _w(ws, row_num, 2 + i, None, formats["bold_bottom"])
+    row_num += 1
+
+    if not is_monthly:
+        for row in metric_rows:
+            _w(ws, row_num, 1, int(row["year"]), formats["indent1"])
+            for i in range(value_count):
+                _w(ws, row_num, 2 + i, row["values"][i], formats["num"])
+            row_num += 1
+        return row_num
+
+    # Monthly: bold year subtotal row, then indented 01.MM.YYYY month rows.
+    years, year_order = _group_rows_by_year(metric_rows)
+    for year in sorted(year_order):
+        year_rows = years[year]
+        year_totals = [sum(r["values"][i] for r in year_rows) for i in range(value_count)]
+        _w(ws, row_num, 1, int(year), formats["bold_indent1"])
+        for i in range(value_count):
+            _w(ws, row_num, 2 + i, year_totals[i], formats["bold_num"])
+        row_num += 1
+
+        for row in sorted(year_rows, key=lambda r: r["month"]):
+            label = f"01.{int(row['month']):02d}.{int(year)}"
+            _w(ws, row_num, 1, label, formats["indent2"])
+            for i in range(value_count):
+                _w(ws, row_num, 2 + i, row["values"][i], formats["num"])
+            row_num += 1
+
+    return row_num
+
+
+def _group_rows_by_metric(rows: list[dict]) -> tuple[dict[str, list[dict]], list[str]]:
+    groups: dict[str, list[dict]] = {}
+    order: list[str] = []
+    for row in rows:
+        key = row["metric_key"]
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(row)
+    return groups, order
+
+
+def _group_rows_by_year(rows: list[dict]) -> tuple[dict[int, list[dict]], list[int]]:
+    groups: dict[int, list[dict]] = {}
+    order: list[int] = []
+    for row in rows:
+        year = int(row["year"])
+        if year not in groups:
+            groups[year] = []
+            order.append(year)
+        groups[year].append(row)
+    return groups, order
 
 
 def _write_monthly_sheet(

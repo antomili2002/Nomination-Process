@@ -506,8 +506,8 @@ def test_non_uk_report_writes_consolidated_iv_ev_monthly_yearly_sheets(
                 "category": "Core Value Metrics",
                 "columns": columns,
                 "rows": [
-                    {"metric_key": "iv", "metric_label": "Intrinsic Value", "year": 2026, "values": [4000.0, 7200.0, 3200.0]},
-                    {"metric_key": "pp", "metric_label": "Power Position", "year": 2026, "values": [4000.0, 7200.0, 3200.0]},
+                    {"metric_key": "iv", "metric_label": "Intrinsic Value", "metric_column": "INTRINSIC_VALUE__CUR", "year": 2026, "values": [4000.0, 7200.0, 3200.0]},
+                    {"metric_key": "pp", "metric_label": "Power Position", "metric_column": "POWER_POS__GWH", "year": 2026, "values": [4000.0, 7200.0, 3200.0]},
                 ],
             },
             {
@@ -516,7 +516,7 @@ def test_non_uk_report_writes_consolidated_iv_ev_monthly_yearly_sheets(
                 "category": "Core Value Metrics",
                 "columns": columns,
                 "rows": [
-                    {"metric_key": "iv", "metric_label": "Intrinsic Value", "year": 2026, "month": 5, "values": [2000.0, 3600.0, 1600.0]},
+                    {"metric_key": "iv", "metric_label": "Intrinsic Value", "metric_column": "INTRINSIC_VALUE__CUR", "year": 2026, "month": 5, "values": [2000.0, 3600.0, 1600.0]},
                 ],
             },
             {
@@ -525,7 +525,7 @@ def test_non_uk_report_writes_consolidated_iv_ev_monthly_yearly_sheets(
                 "category": "Core Value Metrics",
                 "columns": columns,
                 "rows": [
-                    {"metric_key": "ev", "metric_label": "Extrinsic Value", "year": 2026, "values": [2000.0, 5200.0, 3200.0]},
+                    {"metric_key": "ev", "metric_label": "Extrinsic Value", "metric_column": "EXTRINSIC_VALUE", "year": 2026, "values": [2000.0, 5200.0, 3200.0]},
                 ],
             },
             {
@@ -534,7 +534,7 @@ def test_non_uk_report_writes_consolidated_iv_ev_monthly_yearly_sheets(
                 "category": "Core Value Metrics",
                 "columns": columns,
                 "rows": [
-                    {"metric_key": "ev", "metric_label": "Extrinsic Value", "year": 2026, "month": 5, "values": [1000.0, 2600.0, 1600.0]},
+                    {"metric_key": "ev", "metric_label": "Extrinsic Value", "metric_column": "EXTRINSIC_VALUE", "year": 2026, "month": 5, "values": [1000.0, 2600.0, 1600.0]},
                 ],
             },
         ],
@@ -544,13 +544,32 @@ def test_non_uk_report_writes_consolidated_iv_ev_monthly_yearly_sheets(
 
     assert {"IV_Yearly", "IV_Monthly", "EV_Yearly", "EV_Monthly"}.issubset(workbook.sheetnames)
     assert not any(name.endswith("_month") or name.endswith("_sheet") for name in workbook.sheetnames)
+
     iv_yearly = workbook["IV_Yearly"]
+    # Shared blue pivot styling + dashboard layout: page filter header, caption,
+    # single "Row Labels" column, "Sum of" bands, "Total Sum of" rows at the end.
+    assert iv_yearly.cell(1, 1).value == "OUTPUT_TYPE"
+    assert iv_yearly.cell(1, 2).value == "IV"
+    assert iv_yearly.cell(2, 1).value == "MACHINE_NAME"
     assert iv_yearly.cell(4, 1).value == "Core Value Metrics"
-    assert [iv_yearly.cell(5, col).value for col in range(1, 6)] == [
-        "Metric", "Year", "Base", "Final", "Final - Base",
+    assert [iv_yearly.cell(5, col).value for col in range(1, 5)] == [
+        "Row Labels", "Base", "Final", "Final - Base",
     ]
-    assert iv_yearly.cell(6, 1).value == "Intrinsic Value"
-    assert iv_yearly.cell(6, 3).value == pytest.approx(4000.0)
-    assert iv_yearly.cell(6, 5).value == pytest.approx(3200.0)
+    assert iv_yearly.cell(6, 1).value == "Sum of INTRINSIC_VALUE__CUR"
+    assert iv_yearly.cell(7, 1).value == 2026
+    assert iv_yearly.cell(7, 2).value == pytest.approx(4000.0)
+    assert iv_yearly.cell(7, 4).value == pytest.approx(3200.0)
+
+    # Every metric total is collected at the bottom as "Total Sum of <metric>".
+    row_labels = [row[0].value for row in iv_yearly.iter_rows()]
+    assert "Total Sum of INTRINSIC_VALUE__CUR" in row_labels
+    assert "Total Sum of POWER_POS__GWH" in row_labels
+
+    # Monthly view formats month rows as 01.MM.YYYY under a "Sum of" band.
+    iv_monthly = workbook["IV_Monthly"]
+    monthly_labels = [row[0].value for row in iv_monthly.iter_rows()]
+    assert "Sum of INTRINSIC_VALUE__CUR" in monthly_labels
+    assert "01.05.2026" in monthly_labels
+
     assert all("%" not in str(cell.value) for row in iv_yearly.iter_rows() for cell in row if cell.value)
     assert all("tariff" not in str(cell.value).lower() for row in iv_yearly.iter_rows() for cell in row if cell.value)
