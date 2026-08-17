@@ -103,6 +103,68 @@ def test_generate_report_reuses_monthly_aggregations(
     assert len(calls) == len(set(calls))
 
 
+def test_non_uk_report_groups_selected_metrics_by_iv_ev_category_and_period(
+    sample_workbook_path,
+):
+    info_df, raw_data_df = read_workbook_sheets(sample_workbook_path)
+    workbook = WorkbookData(
+        info_df=info_df,
+        raw_data_df=raw_data_df,
+        clean_data_df=clean_data(raw_data_df),
+        scenarios_df=extract_scenarios(info_df),
+        machines=["MACHINE_A"],
+        portfolio_country="NL",
+    )
+
+    result = report_service.generate_report_from_workbook(
+        workbook,
+        "upload-1",
+        _IV_CHAIN,
+        _EV_CHAIN,
+        selected_machines=None,
+        selected_metrics=["ev", "iv", "pp"],
+    )
+
+    assert result["layout"] == "non_uk"
+    assert result["metrics"] == []
+    sections = {(s["output_type"], s["period"]): s for s in result["non_uk_sections"]}
+    assert set(sections) == {
+        ("IV", "monthly"),
+        ("IV", "yearly"),
+        ("EV", "monthly"),
+        ("EV", "yearly"),
+    }
+
+    iv_yearly = sections[("IV", "yearly")]
+    assert iv_yearly["category"] == "Core Value Metrics"
+    assert [column["label"] for column in iv_yearly["columns"]] == [
+        "Base_IV",
+        "Final_IV",
+        "Final_IV - Base_IV",
+    ]
+    assert [row["metric_key"] for row in iv_yearly["rows"]] == ["iv", "pp"]
+    assert iv_yearly["rows"][0] == {
+        "metric_key": "iv",
+        "metric_label": "Intrinsic Value",
+        "year": 2026,
+        "values": [4000.0, 7200.0, 3200.0],
+    }
+    assert "tariff" not in iv_yearly["rows"][0]
+    assert all("%" not in column["label"] for column in iv_yearly["columns"])
+
+    ev_yearly = sections[("EV", "yearly")]
+    assert [row["metric_key"] for row in ev_yearly["rows"]] == ["ev"]
+
+    iv_monthly = sections[("IV", "monthly")]
+    assert iv_monthly["rows"][0] == {
+        "metric_key": "iv",
+        "metric_label": "Intrinsic Value",
+        "year": 2026,
+        "month": 5,
+        "values": [2000.0, 3600.0, 1600.0],
+    }
+
+
 def _upload_file(content: bytes) -> UploadFile:
     return UploadFile(filename="sample.xlsx", file=io.BytesIO(content))
 

@@ -8,6 +8,7 @@ import pytest
 from fastapi import UploadFile
 
 from backend.core.config import settings
+from backend.core.constants import UNIT_COUNTRY_COL
 from backend.core.exceptions import InvalidUploadError, InvalidWorkbookError, ScenarioExtractionError
 from backend.services import upload_service
 from backend.storage.processed_uploads import load_workbook_data
@@ -42,6 +43,12 @@ def test_process_upload_returns_metadata_and_persists_processed_workbook(
         "Outage_EV",
         "Final_EV",
     ]
+
+
+def test_detect_portfolio_country_uses_normalized_unit_country_value():
+    data_df = pd.DataFrame({UNIT_COUNTRY_COL: ["  nl  ", "NL"]})
+
+    assert upload_service.detect_portfolio_country(data_df) == "NL"
 
 
 def test_process_upload_rejects_non_xlsx(monkeypatch):

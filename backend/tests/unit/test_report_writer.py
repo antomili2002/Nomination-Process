@@ -485,3 +485,72 @@ def test_data_sheet_first_data_row(wb):
     # Row 2 = first data row (SCENARIO_ID=200, SCENARIO_NAME=Base_EV)
     assert ws.cell(2, 1).value == 200
     assert ws.cell(2, 2).value == "Base_EV"
+
+
+def test_non_uk_report_writes_consolidated_iv_ev_monthly_yearly_sheets(
+    simple_info_df,
+    simple_data_df,
+):
+    columns = [
+        {"label": "Base", "kind": "scenario"},
+        {"label": "Final", "kind": "scenario"},
+        {"label": "Final - Base", "kind": "delta"},
+    ]
+    report_data = {
+        "layout": "non_uk",
+        "metrics": [],
+        "non_uk_sections": [
+            {
+                "output_type": "IV",
+                "period": "yearly",
+                "category": "Core Value Metrics",
+                "columns": columns,
+                "rows": [
+                    {"metric_key": "iv", "metric_label": "Intrinsic Value", "year": 2026, "values": [4000.0, 7200.0, 3200.0]},
+                    {"metric_key": "pp", "metric_label": "Power Position", "year": 2026, "values": [4000.0, 7200.0, 3200.0]},
+                ],
+            },
+            {
+                "output_type": "IV",
+                "period": "monthly",
+                "category": "Core Value Metrics",
+                "columns": columns,
+                "rows": [
+                    {"metric_key": "iv", "metric_label": "Intrinsic Value", "year": 2026, "month": 5, "values": [2000.0, 3600.0, 1600.0]},
+                ],
+            },
+            {
+                "output_type": "EV",
+                "period": "yearly",
+                "category": "Core Value Metrics",
+                "columns": columns,
+                "rows": [
+                    {"metric_key": "ev", "metric_label": "Extrinsic Value", "year": 2026, "values": [2000.0, 5200.0, 3200.0]},
+                ],
+            },
+            {
+                "output_type": "EV",
+                "period": "monthly",
+                "category": "Core Value Metrics",
+                "columns": columns,
+                "rows": [
+                    {"metric_key": "ev", "metric_label": "Extrinsic Value", "year": 2026, "month": 5, "values": [1000.0, 2600.0, 1600.0]},
+                ],
+            },
+        ],
+    }
+
+    workbook = openpyxl.load_workbook(io.BytesIO(write_report(report_data, simple_info_df, simple_data_df)))
+
+    assert {"IV_Yearly", "IV_Monthly", "EV_Yearly", "EV_Monthly"}.issubset(workbook.sheetnames)
+    assert not any(name.endswith("_month") or name.endswith("_sheet") for name in workbook.sheetnames)
+    iv_yearly = workbook["IV_Yearly"]
+    assert iv_yearly.cell(4, 1).value == "Core Value Metrics"
+    assert [iv_yearly.cell(5, col).value for col in range(1, 6)] == [
+        "Metric", "Year", "Base", "Final", "Final - Base",
+    ]
+    assert iv_yearly.cell(6, 1).value == "Intrinsic Value"
+    assert iv_yearly.cell(6, 3).value == pytest.approx(4000.0)
+    assert iv_yearly.cell(6, 5).value == pytest.approx(3200.0)
+    assert all("%" not in str(cell.value) for row in iv_yearly.iter_rows() for cell in row if cell.value)
+    assert all("tariff" not in str(cell.value).lower() for row in iv_yearly.iter_rows() for cell in row if cell.value)

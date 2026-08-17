@@ -24,6 +24,7 @@ class MetricInfo(BaseModel):
 class UploadResponse(BaseModel):
     upload_id: str
     file_name: str
+    portfolio_country: str
     scenarios: list[ScenarioInfoRow]
     machines: list[str]
     available_metrics: list[MetricInfo]
@@ -119,7 +120,31 @@ class MetricReportSection(BaseModel):
     deltas:  list[YearlyDeltaTable]
 
 
+class NonUkReportColumn(BaseModel):
+    label: str
+    kind: str
+
+
+class NonUkReportRow(BaseModel):
+    metric_key: str
+    metric_label: str
+    year: int
+    month: Optional[int] = None
+    values: list[float]
+
+
+class NonUkReportSection(BaseModel):
+    output_type: str
+    period: str
+    category: str
+    columns: list[NonUkReportColumn]
+    rows: list[NonUkReportRow]
+
+
 class GenerateReportResponse(BaseModel):
     report_id: str
     upload_id: str
+    portfolio_country: str
+    layout: str
     metrics: list[MetricReportSection]
+    non_uk_sections: list[NonUkReportSection]

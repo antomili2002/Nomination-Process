@@ -5,6 +5,7 @@ import type { ReportData } from '../types/report'
 import { buildSections, findMetric, sectionCount } from '../reportMetrics'
 import {
   ExcelPivotSection,
+  NonUkCategorySections,
   YearlyDeltaSection,
 } from '../components/report/ReportSections'
 
@@ -23,17 +24,21 @@ function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
   return {
     reportId:        p.report_id as string,
     uploadId:        base.uploadId,
+    portfolioCountry: p.portfolio_country as string,
+    layout:          p.layout as ReportData['layout'],
     ivChain:         base.ivChain,
     evChain:         base.evChain,
     machines:        base.machines,
     selectedMachines: base.selectedMachines,  // overwritten by caller
     selectedMetrics: base.selectedMetrics,
     metrics: p.metrics as ReportData['metrics'],
+    nonUkSections: p.non_uk_sections as ReportData['nonUkSections'],
   }
 }
 
 export function ResultPage({ reportData, onReset }: Props) {
   const { uploadId, ivChain, evChain, machines, selectedMetrics } = reportData
+  const isNonUk = reportData.layout === 'non_uk'
 
   // Metric structure (key/label/column) is stable across machine-filter recomputes.
   const sections = buildSections(reportData.metrics)
@@ -41,6 +46,8 @@ export function ResultPage({ reportData, onReset }: Props) {
   // -- Section navigation ---------------------------------------------------
   const [activeId, setActiveId] = useState<string>(() => sections[0]?.id ?? '')
   const activeSection = sections.find(s => s.id === activeId) ?? sections[0]
+  const [nonUkOutputType, setNonUkOutputType] = useState<'IV' | 'EV'>('IV')
+  const [nonUkPeriod, setNonUkPeriod] = useState<'monthly' | 'yearly'>('yearly')
 
   // -- Machine filter + cache -----------------------------------------------
   // activeData is what gets rendered; initialised from the passed-in reportData.
@@ -98,6 +105,7 @@ export function ResultPage({ reportData, onReset }: Props) {
           iv_chain:  activeData.ivChain,
           ev_chain:  activeData.evChain,
           selected_machines: activeData.selectedMachines,
+          selected_metrics: activeData.selectedMetrics,
         }),
       })
       if (!resp.ok) {
@@ -166,6 +174,9 @@ export function ResultPage({ reportData, onReset }: Props) {
   // Derived: is any filter active?
   const isFiltered = activeKey !== 'ALL'
   const activeMachineCount = isFiltered ? JSON.parse(activeKey).length : machines.length
+  const activeNonUkSections = activeData.nonUkSections.filter(
+    section => section.output_type === nonUkOutputType && section.period === nonUkPeriod
+  )
 
   return (
     <div style={{ display: 'flex', gap: 0, minHeight: 'calc(100vh - 120px)', alignItems: 'flex-start' }}>
@@ -182,7 +193,38 @@ export function ResultPage({ reportData, onReset }: Props) {
           </p>
         </div>
 
-        {reportData.metrics.map(metric => {
+        {isNonUk ? (
+          <div style={{ padding: 'var(--sp-3)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-1)' }}>
+              {(['IV', 'EV'] as const).map(outputType => (
+                <button
+                  key={outputType}
+                  type="button"
+                  onClick={() => setNonUkOutputType(outputType)}
+                  style={{
+                    padding: '7px 8px', border: '1px solid var(--clr-border)', cursor: 'pointer',
+                    background: nonUkOutputType === outputType ? 'var(--clr-blue)' : '#fff',
+                    color: nonUkOutputType === outputType ? '#fff' : 'var(--clr-text)', fontWeight: 700,
+                  }}
+                >{outputType}</button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+              {(['yearly', 'monthly'] as const).map(period => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => setNonUkPeriod(period)}
+                  style={{
+                    padding: '7px 10px', border: 'none', borderLeft: `3px solid ${nonUkPeriod === period ? 'var(--clr-blue)' : 'transparent'}`,
+                    cursor: 'pointer', textAlign: 'left', background: nonUkPeriod === period ? 'var(--clr-blue-light)' : 'transparent',
+                    color: 'var(--clr-text)', fontWeight: nonUkPeriod === period ? 700 : 400,
+                  }}
+                >{period === 'yearly' ? 'Yearly' : 'Monthly'}</button>
+              ))}
+            </div>
+          </div>
+        ) : reportData.metrics.map(metric => {
           const groupSections = sections.filter(s => s.metricKey === metric.key)
           return (
             <div key={metric.key} style={{ borderBottom: '1px solid var(--clr-border)' }}>
@@ -237,11 +279,17 @@ export function ResultPage({ reportData, onReset }: Props) {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--sp-4)' }}>
           <div>
             <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-semibold)', margin: 0 }}>
-              {activeSection.metricLabel} — {activeSection.label}
+              {isNonUk
+                ? `${nonUkOutputType} - ${nonUkPeriod === 'yearly' ? 'Yearly' : 'Monthly'}`
+                : `${activeSection?.metricLabel ?? ''} - ${activeSection?.label ?? ''}`}
             </h2>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', marginTop: 4 }}>
-              Sum of <code style={{ background: 'var(--clr-bg)', padding: '1px 4px', borderRadius: 3 }}>{activeSection.column}</code>
-              {' · '}{sectionCount(activeData.metrics, activeSection.metricKey, activeSection.tableType)} table{sectionCount(activeData.metrics, activeSection.metricKey, activeSection.tableType) !== 1 ? 's' : ''}
+              {isNonUk
+                ? `${activeNonUkSections.length} categor${activeNonUkSections.length === 1 ? 'y' : 'ies'}`
+                : <>
+                    Sum of <code style={{ background: 'var(--clr-bg)', padding: '1px 4px', borderRadius: 3 }}>{activeSection?.column}</code>
+                    {' · '}{sectionCount(activeData.metrics, activeSection?.metricKey ?? '', activeSection?.tableType ?? 'monthly')} table{sectionCount(activeData.metrics, activeSection?.metricKey ?? '', activeSection?.tableType ?? 'monthly') !== 1 ? 's' : ''}
+                  </>}
               {isFiltered && (
                 <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10, background: 'var(--clr-blue-light)', color: 'var(--clr-blue)', fontWeight: 600 }}>
                   {activeMachineCount}/{machines.length} machines
@@ -367,13 +415,14 @@ export function ResultPage({ reportData, onReset }: Props) {
             </div>
           )}
 
-          {activeSection.tableType === 'monthly' && (
+          {isNonUk && <NonUkCategorySections sections={activeNonUkSections} />}
+          {!isNonUk && activeSection?.tableType === 'monthly' && (
             <ExcelPivotSection
               tables={findMetric(activeData.metrics, activeSection.metricKey)?.monthly ?? []}
               isDelta={false}
             />
           )}
-          {activeSection.tableType === 'yearlyDelta' && (
+          {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
             <YearlyDeltaSection
               tables={findMetric(activeData.metrics, activeSection.metricKey)?.deltas ?? []}
               metric={activeSection.column}

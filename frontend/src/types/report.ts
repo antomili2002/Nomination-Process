@@ -34,14 +34,38 @@ export interface MetricSection {
   deltas: YearlyDeltaTable[]
 }
 
+export interface NonUkReportColumn {
+  label: string
+  kind: string
+}
+
+export interface NonUkReportRow {
+  metric_key: string
+  metric_label: string
+  year: number
+  month?: number | null
+  values: number[]
+}
+
+export interface NonUkReportSection {
+  output_type: 'IV' | 'EV'
+  period: 'monthly' | 'yearly'
+  category: string
+  columns: NonUkReportColumn[]
+  rows: NonUkReportRow[]
+}
+
 export interface ReportData {
   reportId: string
   uploadId: string
+  portfolioCountry: string
+  layout: 'uk' | 'non_uk'
   ivChain: number[]
   evChain: number[]
   machines: string[]
   selectedMachines: string[] | null
   selectedMetrics: string[]
   metrics: MetricSection[]
+  nonUkSections: NonUkReportSection[]
 }
 

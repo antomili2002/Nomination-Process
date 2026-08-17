@@ -6,7 +6,7 @@ import openpyxl
 import pytest
 
 from backend.core.exceptions import InvalidWorkbookError
-from backend.processing.readers import read_workbook_sheets
+from backend.processing.readers import _workbook_engine, read_workbook_sheets
 
 
 _FIXTURE_DIR = Path("backend/tmp/test_fixtures")
@@ -62,4 +62,22 @@ def test_raises_on_corrupt_file():
     path = _fixture_path("bad.xlsx")
     path.write_bytes(b"this is not a valid xlsx file")
     with pytest.raises(InvalidWorkbookError, match="Cannot open workbook"):
+        read_workbook_sheets(path)
+
+
+def test_routes_ole_compound_workbook_to_calamine_reader():
+    path = _fixture_path("legacy_dexter.xlsx")
+    path.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"legacy workbook")
+
+    assert _workbook_engine(path) == "calamine"
+
+
+def test_raises_actionable_error_for_password_encrypted_workbook():
+    path = _fixture_path("encrypted_dexter.xlsx")
+    path.write_bytes(
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+        + "EncryptedPackage".encode("utf-16-le")
+    )
+
+    with pytest.raises(InvalidWorkbookError, match="Password-protected workbooks"):
         read_workbook_sheets(path)

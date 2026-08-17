@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from fastapi import UploadFile
 
-from backend.core.constants import MACHINE_NAME_COL
+from backend.core.constants import MACHINE_NAME_COL, UNIT_COUNTRY_COL
 from backend.core.config import settings
 from backend.domain.report_metrics import available_metrics
 from backend.domain.workbook import ScenarioInfo, UploadedWorkbook, WorkbookData
@@ -22,6 +22,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
     info_df, raw_data_df = read_workbook_sheets(path)
     scenarios_df, clean_data_df = _process_workbook_frames(info_df, raw_data_df)
     machines = _extract_machines(clean_data_df)
+    portfolio_country = detect_portfolio_country(clean_data_df)
 
     save_workbook_data(
         settings.upload_dir / upload_id,
@@ -31,6 +32,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
             clean_data_df=clean_data_df,
             scenarios_df=scenarios_df,
             machines=machines,
+            portfolio_country=portfolio_country,
         ),
     )
 
@@ -40,6 +42,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
         scenarios=_to_domain_scenarios(scenarios_df),
         machines=machines,
         available_metrics=list(available_metrics(clean_data_df)),
+        portfolio_country=portfolio_country,
     )
 
 
@@ -75,3 +78,15 @@ def _extract_machines(data_df: pd.DataFrame) -> list[str]:
     if MACHINE_NAME_COL not in data_df.columns:
         return []
     return sorted(data_df[MACHINE_NAME_COL].dropna().unique().tolist())
+
+
+def detect_portfolio_country(data_df: pd.DataFrame) -> str:
+    """Return the normalized portfolio country from the optional Data-sheet field."""
+    if UNIT_COUNTRY_COL not in data_df.columns:
+        return "UK"
+
+    countries = data_df[UNIT_COUNTRY_COL].dropna().astype(str).str.strip()
+    countries = countries[countries.str.lower().ne("nan") & countries.ne("")]
+    if countries.empty:
+        return "UK"
+    return countries.iloc[0].upper()

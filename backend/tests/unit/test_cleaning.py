@@ -13,6 +13,7 @@ from backend.core.constants import (
     POWER_POS_COL,
     SCENARIO_NAME_COL,
     TARIFF_COL,
+    UNIT_COUNTRY_COL,
     YEAR_COL,
 )
 from backend.core.exceptions import InvalidWorkbookError
@@ -49,6 +50,15 @@ def test_strips_whitespace_from_string_columns():
     assert result.loc[0, OUTPUT_TYPE_COL] == "EXTRINSIC_VALUE"
     assert result.loc[0, TARIFF_COL] == "peak"
     assert result.loc[0, MACHINE_NAME_COL] == "MACHINE_A"
+
+
+def test_strips_whitespace_from_unit_country():
+    df = _df(_minimal_row(**{UNIT_COUNTRY_COL: "  NL  "}))
+
+    result = clean_data(df)
+
+    assert result.loc[0, UNIT_COUNTRY_COL] == "NL"
+    assert not pd.api.types.is_numeric_dtype(result[UNIT_COUNTRY_COL])
 
 
 def test_coerces_year_and_month_to_numeric():

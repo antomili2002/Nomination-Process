@@ -25,6 +25,7 @@ from backend.processing.report_builder import (
     build_available_machines,
     build_metric_preview,
     build_metric_report,
+    build_non_uk_category_sections,
 )
 from backend.storage.processed_uploads import load_workbook_data
 
@@ -183,6 +184,24 @@ def generate_report_from_workbook(
         selected_set = set(selected_metrics)
         metrics_to_build = tuple(m for m in metrics_to_build if m.key in selected_set)
 
+    if workbook.portfolio_country != "UK":
+        return {
+            "report_id": str(uuid.uuid4()),
+            "upload_id": upload_id,
+            "portfolio_country": workbook.portfolio_country,
+            "layout": "non_uk",
+            "metrics": [],
+            "non_uk_sections": build_non_uk_category_sections(
+                data_df,
+                iv_chain,
+                ev_chain,
+                metrics_to_build,
+                index_to_name,
+                selected_machines,
+                cache,
+            ),
+        }
+
     metric_results = []
     for metric in metrics_to_build:
         tables = build_metric_report(
@@ -207,5 +226,8 @@ def generate_report_from_workbook(
     return {
         "report_id":  str(uuid.uuid4()),
         "upload_id":  upload_id,
+        "portfolio_country": workbook.portfolio_country,
+        "layout": "uk",
         "metrics":    metric_results,
+        "non_uk_sections": [],
     }

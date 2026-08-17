@@ -10,6 +10,7 @@ from backend.core.constants import (
     REQUIRED_DATA_COLS,
     SCENARIO_NAME_COL,
     TARIFF_COL,
+    UNIT_COUNTRY_COL,
     YEAR_COL,
 )
 from backend.core.exceptions import InvalidWorkbookError
@@ -33,7 +34,13 @@ def _assert_required_columns(df: pd.DataFrame) -> None:
 
 
 def _clean_string_columns(df: pd.DataFrame) -> pd.DataFrame:
-    for col in [SCENARIO_NAME_COL, OUTPUT_TYPE_COL, TARIFF_COL, MACHINE_NAME_COL]:
+    for col in [
+        SCENARIO_NAME_COL,
+        OUTPUT_TYPE_COL,
+        TARIFF_COL,
+        MACHINE_NAME_COL,
+        UNIT_COUNTRY_COL,
+    ]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
     return df

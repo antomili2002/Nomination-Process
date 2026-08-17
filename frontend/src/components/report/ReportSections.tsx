@@ -1,6 +1,6 @@
 import React from 'react'
 import type { PivotTableData } from '../PivotTable'
-import type { YearlyDeltaTable } from '../../types/report'
+import type { NonUkReportSection, YearlyDeltaTable } from '../../types/report'
 
 function fmtN(v: number): string {
   if (Math.abs(v) < 0.005) return '\u2014'
@@ -202,6 +202,56 @@ export function ExcelPivotSection({ tables, isDelta }: { tables: PivotTableData[
           )}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+export function NonUkCategorySections({ sections }: { sections: NonUkReportSection[] }) {
+  if (sections.length === 0) {
+    return <p style={{ color: 'var(--clr-text-muted)', fontStyle: 'italic' }}>No data available.</p>
+  }
+
+  const hasMonth = sections[0]?.period === 'monthly'
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
+      {sections.map(section => (
+        <div key={`${section.output_type}-${section.period}-${section.category}`}>
+          <p style={{ margin: '0 0 var(--sp-2)', fontSize: 'var(--text-sm)', fontWeight: 700 }}>
+            {section.category}
+          </p>
+          <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
+            <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...TH, textAlign: 'left', minWidth: 220 }}>Metric</th>
+                  <th style={{ ...TH, minWidth: 90 }}>Year</th>
+                  {hasMonth && <th style={{ ...TH, minWidth: 90 }}>Month</th>}
+                  {section.columns.map(column => (
+                    <th key={column.label} style={{ ...TH, minWidth: 150 }}>{column.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {section.rows.map((row, index) => (
+                  <tr key={`${row.metric_key}-${row.year}-${row.month ?? ''}`} style={{ background: index % 2 === 0 ? '#fff' : '#fafafa' }}>
+                    <td style={{ ...TDL, paddingLeft: 16 }}>{row.metric_label}</td>
+                    <td style={TD}>{row.year}</td>
+                    {hasMonth && <td style={TD}>{row.month}</td>}
+                    {row.values.map((value, valueIndex) => {
+                      const delta = section.columns[valueIndex]?.kind === 'delta'
+                      return (
+                        <td key={valueIndex} style={{ ...TD, color: delta ? fmtDif(value).color : undefined }}>
+                          {delta ? fmtDif(value).text : fmtY(value)}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

@@ -46,7 +46,7 @@ type DragSrc =
   | { kind: 'chain-item'; chain: 'iv' | 'ev'; pos: number }
 
 export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
-  const { scenarios, machines, uploadId, fileName, availableMetrics } = uploadCtx
+  const { scenarios, machines, uploadId, fileName, portfolioCountry, availableMetrics } = uploadCtx
 
   const [chains, setChains] = useState<ChainState>(() => buildInitialChains(scenarios))
   const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(
@@ -131,12 +131,15 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
       onSuccess({
         reportId:        payload.report_id,
         uploadId:        uploadId,
+        portfolioCountry: payload.portfolio_country,
+        layout:          payload.layout,
         ivChain:         chains.iv,
         evChain:         chains.ev,
         machines:        machines,
         selectedMachines: null,
         selectedMetrics: [...selectedMetrics],
         metrics: payload.metrics,
+        nonUkSections: payload.non_uk_sections,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Report generation failed.')

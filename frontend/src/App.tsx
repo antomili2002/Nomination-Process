@@ -13,6 +13,7 @@ export type AppStep = 'upload' | 'configure' | 'result'
 export interface UploadContext {
   uploadId: string
   fileName: string
+  portfolioCountry: string
   scenarios: ScenarioRow[]
   machines: string[]
   availableMetrics: MetricInfo[]

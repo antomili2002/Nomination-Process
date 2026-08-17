@@ -8,6 +8,7 @@ python-dotenv
 pandas
 numpy
 openpyxl
+python-calamine
 xlsxwriter
 
 pytest

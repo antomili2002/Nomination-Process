@@ -17,6 +17,7 @@ def test_save_and_load_workbook_data_round_trips_frames_and_metadata():
         [{"index": 0, "scenario_name": "Base", "scenario_id": 1}]
     )
     machines = ["MACHINE_A", "MACHINE_B"]
+    portfolio_country = "NL"
 
     processed_uploads.save_workbook_data(
         upload_dir,
@@ -26,6 +27,7 @@ def test_save_and_load_workbook_data_round_trips_frames_and_metadata():
             clean_data_df=clean_data_df,
             scenarios_df=scenarios,
             machines=machines,
+            portfolio_country=portfolio_country,
         ),
     )
 
@@ -36,6 +38,7 @@ def test_save_and_load_workbook_data_round_trips_frames_and_metadata():
     pd.testing.assert_frame_equal(loaded.clean_data_df, clean_data_df)
     pd.testing.assert_frame_equal(loaded.scenarios_df, scenarios)
     assert loaded.machines == machines
+    assert loaded.portfolio_country == portfolio_country
 
 
 def test_load_workbook_data_raises_file_not_found_for_missing_artifacts():

@@ -31,25 +31,28 @@ def write_report(
         wb = xlsxwriter.Workbook(tmp_path, {"constant_memory": True})
         formats = _create_formats(wb)
 
-        used_prefixes: set[str] = set()
-        for metric in report_data["metrics"]:
-            prefix = _unique_prefix(metric["excel_prefix"], used_prefixes)
-            _write_monthly_sheet(
-                wb,
-                f"{prefix}_month",
-                metric["monthly"],
-                metric["column"],
-                metric["output_type"],
-                formats,
-            )
-            _write_delta_sheet(
-                wb,
-                f"{prefix}_sheet",
-                metric["deltas"],
-                metric["column"],
-                metric["output_type"],
-                formats,
-            )
+        if report_data.get("layout", "uk") == "non_uk":
+            _write_non_uk_sheets(wb, report_data["non_uk_sections"], formats)
+        else:
+            used_prefixes: set[str] = set()
+            for metric in report_data["metrics"]:
+                prefix = _unique_prefix(metric["excel_prefix"], used_prefixes)
+                _write_monthly_sheet(
+                    wb,
+                    f"{prefix}_month",
+                    metric["monthly"],
+                    metric["column"],
+                    metric["output_type"],
+                    formats,
+                )
+                _write_delta_sheet(
+                    wb,
+                    f"{prefix}_sheet",
+                    metric["deltas"],
+                    metric["column"],
+                    metric["output_type"],
+                    formats,
+                )
 
         _df_to_sheet(wb, "Info", info_df, write_header=False, formats=formats)
         _df_to_sheet(wb, "Data", data_df, write_header=True, formats=formats)
@@ -129,6 +132,87 @@ def _w(ws, row: int, col: int, value, fmt=None) -> None:
 def _month_values(data_months: list[int], values: list[float]) -> list[Optional[float]]:
     lookup = dict(zip(data_months, values))
     return [lookup.get(m) for m in _ALL_MONTHS]
+
+
+def _write_non_uk_sheets(
+    wb: xlsxwriter.Workbook,
+    sections: list[dict],
+    formats: dict,
+) -> None:
+    """Write the four non-UK views, with one table per category on each sheet."""
+    for output_type, period, sheet_name in (
+        ("IV", "yearly", "IV_Yearly"),
+        ("IV", "monthly", "IV_Monthly"),
+        ("EV", "yearly", "EV_Yearly"),
+        ("EV", "monthly", "EV_Monthly"),
+    ):
+        ws = wb.add_worksheet(sheet_name)
+        ws.hide_gridlines(2)
+        ws.set_column(0, 0, 32)
+        ws.set_column(1, 2, 14)
+        ws.set_column(3, 20, 24)
+
+        _w(ws, 1, 1, "OUTPUT_TYPE", formats["blue"])
+        _w(ws, 1, 2, output_type, formats["blue"])
+        _w(ws, 2, 1, "MACHINE_NAME", formats["blue"])
+        _w(ws, 2, 2, "(All)", formats["blue"])
+
+        row_num = 4
+        matching_sections = [
+            section for section in sections
+            if section["output_type"] == output_type and section["period"] == period
+        ]
+        for section in matching_sections:
+            row_num = _write_non_uk_category_table(ws, row_num, section, formats)
+            row_num += 2
+
+
+def _write_non_uk_category_table(
+    ws: xlsxwriter.worksheet.Worksheet,
+    row_num: int,
+    section: dict,
+    formats: dict,
+) -> int:
+    columns: list[dict] = section["columns"]
+    rows: list[dict] = section["rows"]
+    is_monthly = section["period"] == "monthly"
+
+    _w(ws, row_num, 1, section["category"], formats["bold_blue"])
+    for column_index in range(2, len(columns) + 3 + int(is_monthly)):
+        _w(ws, row_num, column_index, None, formats["blue"])
+    row_num += 1
+
+    headers = ["Metric", "Year"]
+    if is_monthly:
+        headers.append("Month")
+    headers.extend(column["label"] for column in columns)
+    for column_index, header in enumerate(headers, start=1):
+        _w(ws, row_num, column_index, header, formats["bold_blue_bottom"])
+    row_num += 1
+
+    totals = [0.0] * len(columns)
+    for row in rows:
+        _w(ws, row_num, 1, row["metric_label"], formats["indent1"])
+        _w(ws, row_num, 2, row["year"], formats["num"])
+        value_column = 3
+        if is_monthly:
+            _w(ws, row_num, 3, row["month"], formats["num"])
+            value_column = 4
+        for index, value in enumerate(row["values"]):
+            _w(ws, row_num, value_column + index, value, formats["num"])
+            totals[index] += value
+        row_num += 1
+
+    if rows:
+        label_columns = 3 if is_monthly else 2
+        _w(ws, row_num, 1, f"Total {section['category']}", formats["bold_blue"])
+        for column_index in range(2, label_columns + 1):
+            _w(ws, row_num, column_index, None, formats["blue"])
+        for index, value in enumerate(totals):
+            _w(ws, row_num, label_columns + 1 + index, value, formats["bold_blue_num"])
+        row_num += 1
+
+    return row_num
 
 
 def _write_monthly_sheet(

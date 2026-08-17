@@ -6,6 +6,7 @@ YEAR_COL          = "YEAR"
 MONTH_COL         = "MONTH"
 TARIFF_COL        = "TARIFF"
 MACHINE_NAME_COL  = "MACHINE_NAME"
+UNIT_COUNTRY_COL  = "UNIT_COUNTRY"
 POWER_POS_COL     = "POWER_POS__GWH"
 IV_COL            = "INTRINSIC_VALUE__CUR"
 EV_COL            = "EXTRINSIC_VALUE"
@@ -30,10 +31,13 @@ DIMENSION_COLS = [
     MONTH_COL,
     TARIFF_COL,
     MACHINE_NAME_COL,
+    UNIT_COUNTRY_COL,
 ]
 
 # Minimum columns required in the Data sheet
-REQUIRED_DATA_COLS = DIMENSION_COLS + METRIC_COLS
+REQUIRED_DATA_COLS = [
+    column for column in DIMENSION_COLS if column != UNIT_COUNTRY_COL
+] + METRIC_COLS
 
 # Value in the first column of the Info sheet header row
 INFO_HEADER_SENTINEL = "Scenario Name"

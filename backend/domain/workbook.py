@@ -25,6 +25,7 @@ class UploadedWorkbook:
     scenarios: list[ScenarioInfo]
     machines: list[str]
     available_metrics: list[ReportMetric]
+    portfolio_country: str = "UK"
 
 
 @dataclass(frozen=True)
@@ -34,3 +35,4 @@ class WorkbookData:
     clean_data_df: pd.DataFrame
     scenarios_df: pd.DataFrame
     machines: list[str]
+    portfolio_country: str = "UK"

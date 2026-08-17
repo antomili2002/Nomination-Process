@@ -4,7 +4,7 @@ from typing import Optional
 
 import pandas as pd
 
-from backend.core.constants import MACHINE_NAME_COL
+from backend.core.constants import EV_COL, MACHINE_NAME_COL, MONTH_COL, YEAR_COL
 from backend.domain.report_metrics import ReportMetric
 from backend.processing.chain_builder import DeltaPair
 from backend.processing.delta_output import compute_delta
@@ -72,6 +72,120 @@ def build_metric_report(
         "deltas": build_yearly_delta_tables(
             data_df, pairs, metric, selected_machines, cache
         ),
+    }
+
+
+def build_non_uk_category_sections(
+    data_df: pd.DataFrame,
+    iv_chain_indices: list[int],
+    ev_chain_indices: list[int],
+    metrics: tuple[ReportMetric, ...],
+    index_to_name: dict[int, str],
+    selected_machines: Optional[list[str]],
+    cache: ReportAggregationCache | None = None,
+) -> list[dict]:
+    """Build category tables for the non-UK layout.
+
+    The non-UK report is intentionally independent from the UK tariff pivot:
+    every metric is grouped by its category, and tariff values are summed into
+    monthly and yearly values. ``EXTRINSIC_VALUE`` is the sole EV metric;
+    all other selected metrics belong to IV.
+    """
+    grouped_metrics: dict[str, dict[str, list[ReportMetric]]] = {"IV": {}, "EV": {}}
+    for metric in metrics:
+        output_type = "EV" if metric.column == EV_COL else "IV"
+        grouped_metrics[output_type].setdefault(metric.category, []).append(metric)
+
+    sections: list[dict] = []
+    for output_type, categories in grouped_metrics.items():
+        chain_indices = ev_chain_indices if output_type == "EV" else iv_chain_indices
+        base_name = index_to_name[chain_indices[0]]
+        final_name = index_to_name[chain_indices[-1]]
+        columns = [
+            {"label": base_name, "kind": "scenario"},
+            {"label": final_name, "kind": "scenario"},
+            {"label": f"{final_name} - {base_name}", "kind": "delta"},
+        ]
+
+        for category, category_metrics in categories.items():
+            sections.append({
+                "output_type": output_type,
+                "period": "monthly",
+                "category": category,
+                "columns": columns,
+                "rows": _build_non_uk_rows(
+                    data_df,
+                    category_metrics,
+                    base_name,
+                    final_name,
+                    [YEAR_COL, MONTH_COL],
+                    selected_machines,
+                    cache,
+                ),
+            })
+            sections.append({
+                "output_type": output_type,
+                "period": "yearly",
+                "category": category,
+                "columns": columns,
+                "rows": _build_non_uk_rows(
+                    data_df,
+                    category_metrics,
+                    base_name,
+                    final_name,
+                    [YEAR_COL],
+                    selected_machines,
+                    cache,
+                ),
+            })
+    return sections
+
+
+def _build_non_uk_rows(
+    data_df: pd.DataFrame,
+    metrics: list[ReportMetric],
+    base_name: str,
+    final_name: str,
+    date_columns: list[str],
+    selected_machines: Optional[list[str]],
+    cache: ReportAggregationCache | None,
+) -> list[dict]:
+    rows: list[dict] = []
+    for metric in metrics:
+        base_values = _group_non_uk_values(
+            _agg(data_df, [base_name], metric.column, selected_machines, cache),
+            metric.column,
+            date_columns,
+        )
+        final_values = _group_non_uk_values(
+            _agg(data_df, [final_name], metric.column, selected_machines, cache),
+            metric.column,
+            date_columns,
+        )
+        for date_key in sorted(set(base_values) | set(final_values)):
+            base_value = base_values.get(date_key, 0.0)
+            final_value = final_values.get(date_key, 0.0)
+            row = {
+                "metric_key": metric.key,
+                "metric_label": metric.label,
+                "values": [base_value, final_value, final_value - base_value],
+            }
+            row.update(dict(zip((column.lower() for column in date_columns), date_key)))
+            rows.append(row)
+    return rows
+
+
+def _group_non_uk_values(
+    monthly_data: pd.DataFrame,
+    metric_column: str,
+    date_columns: list[str],
+) -> dict[tuple[int, ...], float]:
+    grouped = monthly_data.groupby(date_columns)[metric_column].sum()
+    return {
+        tuple(int(value) for value in key if value is not None)
+        if isinstance(key, tuple)
+        else (int(key),): float(value)
+        for key, value in grouped.items()
     }
 
 

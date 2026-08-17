@@ -30,6 +30,17 @@ def _upload(workbook_bytes: bytes) -> dict:
     return resp.json()
 
 
+def _with_unit_country(workbook_bytes: bytes, country: str) -> bytes:
+    workbook = openpyxl.load_workbook(io.BytesIO(workbook_bytes))
+    data_sheet = workbook["Data"]
+    data_sheet.cell(row=1, column=data_sheet.max_column + 1, value="UNIT_COUNTRY")
+    for row in range(2, data_sheet.max_row + 1):
+        data_sheet.cell(row=row, column=data_sheet.max_column, value=country)
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def _metric(data: dict, key: str) -> dict:
     """Look up a metric section by key from a /reports/generate response."""
     return next(m for m in data["metrics"] if m["key"] == key)
@@ -81,6 +92,9 @@ class TestUpload:
 
     def test_machine_list_returned(self, uploaded_module):
         assert uploaded_module["machines"] == ["MACHINE_A"]
+
+    def test_portfolio_country_returned(self, uploaded_module):
+        assert uploaded_module["portfolio_country"] == "UK"
 
     def test_available_metrics_returned(self, uploaded_module):
         keys = {m["key"] for m in uploaded_module["available_metrics"]}
@@ -210,6 +224,38 @@ class TestGenerateReport:
         assert "report_id" in data
         # upload_id echoed back so clients can recompute with a different machine filter
         assert data["upload_id"] == uploaded["upload_id"]
+
+    def test_portfolio_country_is_preserved_from_upload(self, uploaded):
+        resp = client.post("/reports/generate", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+
+        assert resp.json()["portfolio_country"] == uploaded["portfolio_country"]
+
+    def test_non_uk_response_returns_grouped_iv_ev_category_sections(self, sample_workbook_bytes):
+        uploaded = _upload(_with_unit_country(sample_workbook_bytes, "NL"))
+        response = client.post("/reports/generate", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": _EV_CHAIN_SIMPLE,
+            "selected_metrics": ["ev", "iv", "pp"],
+        })
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["layout"] == "non_uk"
+        assert data["metrics"] == []
+        sections = {(s["output_type"], s["period"]): s for s in data["non_uk_sections"]}
+        assert set(sections) == {
+            ("IV", "monthly"),
+            ("IV", "yearly"),
+            ("EV", "monthly"),
+            ("EV", "yearly"),
+        }
+        assert all("tariff" not in row for row in sections[("IV", "monthly")]["rows"])
+        assert all("%" not in column["label"] for column in sections[("IV", "yearly")]["columns"])
 
     def test_monthly_tables_count(self, uploaded):
         resp = client.post("/reports/generate", json={

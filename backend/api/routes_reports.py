@@ -17,6 +17,9 @@ from backend.api.schemas import (
     DeltaPairInfo,
     GenerateReportResponse,
     MetricReportSection,
+    NonUkReportColumn,
+    NonUkReportRow,
+    NonUkReportSection,
     PivotRow,
     PivotTable,
     ReportGenerationRequest,
@@ -121,6 +124,8 @@ def generate_report(body: ReportGenerationRequest):
     return GenerateReportResponse(
         report_id=result["report_id"],
         upload_id=result["upload_id"],
+        portfolio_country=result["portfolio_country"],
+        layout=result["layout"],
         metrics=[
             MetricReportSection(
                 key=m["key"],
@@ -130,5 +135,15 @@ def generate_report(body: ReportGenerationRequest):
                 deltas=_to_yearly_delta_tables(m["deltas"]),
             )
             for m in result["metrics"]
+        ],
+        non_uk_sections=[
+            NonUkReportSection(
+                output_type=section["output_type"],
+                period=section["period"],
+                category=section["category"],
+                columns=[NonUkReportColumn(**column) for column in section["columns"]],
+                rows=[NonUkReportRow(**row) for row in section["rows"]],
+            )
+            for section in result["non_uk_sections"]
         ],
     )
