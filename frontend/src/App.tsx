@@ -14,6 +14,7 @@ export interface UploadContext {
   uploadId: string
   fileName: string
   portfolioCountry: string
+  asOfDate: string | null
   scenarios: ScenarioRow[]
   machines: string[]
   availableMetrics: MetricInfo[]

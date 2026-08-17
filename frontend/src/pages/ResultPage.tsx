@@ -24,6 +24,7 @@ function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
   return {
     reportId:        p.report_id as string,
     uploadId:        base.uploadId,
+    asOfDate:        base.asOfDate,
     portfolioCountry: p.portfolio_country as string,
     layout:          p.layout as ReportData['layout'],
     ivChain:         base.ivChain,
@@ -191,6 +192,11 @@ export function ResultPage({ reportData, onReset }: Props) {
           <p style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-blue)', margin: 0 }}>
             Report Tables
           </p>
+          {reportData.asOfDate && (
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--clr-text-muted)', margin: '4px 0 0', fontWeight: 500 }}>
+              As of: <strong>{reportData.asOfDate}</strong>
+            </p>
+          )}
         </div>
 
         {isNonUk ? (

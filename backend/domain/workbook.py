@@ -25,7 +25,8 @@ class UploadedWorkbook:
     scenarios: list[ScenarioInfo]
     machines: list[str]
     available_metrics: list[ReportMetric]
-    portfolio_country: str = "UK"
+    portfolio_country: str
+    as_of_date: str | None
 
 
 @dataclass(frozen=True)

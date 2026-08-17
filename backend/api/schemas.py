@@ -25,6 +25,7 @@ class UploadResponse(BaseModel):
     upload_id: str
     file_name: str
     portfolio_country: str
+    as_of_date: Optional[str] = None
     scenarios: list[ScenarioInfoRow]
     machines: list[str]
     available_metrics: list[MetricInfo]

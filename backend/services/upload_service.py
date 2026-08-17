@@ -23,6 +23,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
     scenarios_df, clean_data_df = _process_workbook_frames(info_df, raw_data_df)
     machines = _extract_machines(clean_data_df)
     portfolio_country = detect_portfolio_country(clean_data_df)
+    as_of_date = _extract_as_of_date(clean_data_df)
 
     save_workbook_data(
         settings.upload_dir / upload_id,
@@ -43,6 +44,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
         machines=machines,
         available_metrics=list(available_metrics(clean_data_df)),
         portfolio_country=portfolio_country,
+        as_of_date=as_of_date,
     )
 
 
@@ -90,3 +92,17 @@ def detect_portfolio_country(data_df: pd.DataFrame) -> str:
     if countries.empty:
         return "UK"
     return countries.iloc[0].upper()
+
+
+def _extract_as_of_date(data_df: pd.DataFrame) -> str | None:
+    """Return the first non-null AS_OF_DATE value as an ISO date string."""
+    col = "AS_OF_DATE"
+    if col not in data_df.columns:
+        return None
+    series = data_df[col].dropna()
+    if series.empty:
+        return None
+    val = series.iloc[0]
+    if hasattr(val, "strftime"):
+        return val.strftime("%Y-%m-%d")
+    return str(val).split(" ")[0]

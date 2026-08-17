@@ -59,6 +59,7 @@ export interface NonUkReportSection {
 export interface ReportData {
   reportId: string
   uploadId: string
+  asOfDate: string | null
   portfolioCountry: string
   layout: 'uk' | 'non_uk'
   ivChain: number[]

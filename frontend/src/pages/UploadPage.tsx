@@ -67,6 +67,7 @@ export function UploadPage({ onSuccess }: Props) {
         uploadId: data.upload_id,
         fileName: data.file_name,
         portfolioCountry: data.portfolio_country,
+        asOfDate: data.as_of_date ?? null,
         scenarios: data.scenarios.map((s: {
           index: number
           scenario_name: string

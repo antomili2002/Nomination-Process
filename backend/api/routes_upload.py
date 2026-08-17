@@ -32,6 +32,7 @@ def _to_response(upload: UploadedWorkbook) -> UploadResponse:
         upload_id=upload.upload_id,
         file_name=upload.file_name,
         portfolio_country=upload.portfolio_country,
+        as_of_date=upload.as_of_date,
         scenarios=[ScenarioInfoRow(**vars(row)) for row in upload.scenarios],
         machines=upload.machines,
         available_metrics=[

@@ -46,7 +46,7 @@ type DragSrc =
   | { kind: 'chain-item'; chain: 'iv' | 'ev'; pos: number }
 
 export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
-  const { scenarios, machines, uploadId, fileName, availableMetrics } = uploadCtx
+const { scenarios, machines, uploadId, fileName, availableMetrics, asOfDate } = uploadCtx
 
   const [chains, setChains] = useState<ChainState>(() => buildInitialChains(scenarios))
   const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(
@@ -131,6 +131,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
       onSuccess({
         reportId:        payload.report_id,
         uploadId:        uploadId,
+        asOfDate:        asOfDate,
         portfolioCountry: payload.portfolio_country,
         layout:          payload.layout,
         ivChain:         chains.iv,
