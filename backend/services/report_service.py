@@ -195,6 +195,8 @@ def generate_report_from_workbook(
                 data_df,
                 iv_chain,
                 ev_chain,
+                iv_pairs,
+                ev_pairs,
                 metrics_to_build,
                 index_to_name,
                 selected_machines,

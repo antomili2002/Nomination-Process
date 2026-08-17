@@ -1,6 +1,6 @@
 import React from 'react'
 import type { PivotTableData } from '../PivotTable'
-import type { NonUkReportSection, YearlyDeltaTable } from '../../types/report'
+import type { NonUkReportSection, NonUkReportRow, YearlyDeltaTable } from '../../types/report'
 
 function fmtN(v: number): string {
   if (Math.abs(v) < 0.005) return '\u2014'
@@ -212,46 +212,120 @@ export function NonUkCategorySections({ sections }: { sections: NonUkReportSecti
   }
 
   const hasMonth = sections[0]?.period === 'monthly'
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
-      {sections.map(section => (
-        <div key={`${section.output_type}-${section.period}-${section.category}`}>
-          <p style={{ margin: '0 0 var(--sp-2)', fontSize: 'var(--text-sm)', fontWeight: 700 }}>
-            {section.category}
-          </p>
-          <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
-            <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...TH, textAlign: 'left', minWidth: 220 }}>Metric</th>
-                  <th style={{ ...TH, minWidth: 90 }}>Year</th>
-                  {hasMonth && <th style={{ ...TH, minWidth: 90 }}>Month</th>}
-                  {section.columns.map(column => (
-                    <th key={column.label} style={{ ...TH, minWidth: 150 }}>{column.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {section.rows.map((row, index) => (
-                  <tr key={`${row.metric_key}-${row.year}-${row.month ?? ''}`} style={{ background: index % 2 === 0 ? '#fff' : '#fafafa' }}>
-                    <td style={{ ...TDL, paddingLeft: 16 }}>{row.metric_label}</td>
-                    <td style={TD}>{row.year}</td>
-                    {hasMonth && <td style={TD}>{row.month}</td>}
-                    {row.values.map((value, valueIndex) => {
-                      const delta = section.columns[valueIndex]?.kind === 'delta'
-                      return (
-                        <td key={valueIndex} style={{ ...TD, color: delta ? fmtDif(value).color : undefined }}>
-                          {delta ? fmtDif(value).text : fmtY(value)}
-                        </td>
-                      )
-                    })}
+      {sections.map(section => {
+        const cols = section.columns
+        const totalCols = cols.length + 1
+
+        const metricGroups = new Map<string, NonUkReportRow[]>()
+        for (const row of section.rows) {
+          if (!metricGroups.has(row.metric_key)) metricGroups.set(row.metric_key, [])
+          metricGroups.get(row.metric_key)!.push(row)
+        }
+
+        function valCells(values: number[], bold = false) {
+          return values.map((v, vi) => {
+            const kind = cols[vi]?.kind ?? 'scenario'
+            const isDelta = kind === 'delta' || kind === 'cumulative'
+            if (isDelta) { const { text, color } = fmtDif(v); return <td key={vi} style={{ ...TD, fontWeight: bold ? 700 : undefined, color }}>{text}</td> }
+            return <td key={vi} style={{ ...TD, fontWeight: bold ? 700 : undefined }}>{fmtY(v)}</td>
+          })
+        }
+
+        function colTotals(rows: NonUkReportRow[]) {
+          return cols.map((_, ci) => rows.reduce((s, r) => s + (r.values[ci] ?? 0), 0))
+        }
+
+        return (
+          <div key={`${section.output_type}-${section.period}-${section.category}`}>
+            <p style={{ margin: '0 0 var(--sp-2)', fontSize: 'var(--text-sm)', fontWeight: 700 }}>
+              {section.category}
+            </p>
+            <div className="table-wrapper" style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--clr-border)' }}>
+              <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...TH, textAlign: 'left', minWidth: 260 }}>Row Labels</th>
+                    {cols.map(col => (
+                      <th key={col.label} style={{ ...TH, minWidth: 140 }}>{col.label}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {/* All metric groups first (no totals) */}
+                  {[...metricGroups.entries()].map(([metricKey, rows]) => {
+                    const metricCol = rows[0].metric_column
+
+                    if (hasMonth) {
+                      const yearMap = new Map<number, NonUkReportRow[]>()
+                      for (const row of rows) {
+                        if (!yearMap.has(row.year)) yearMap.set(row.year, [])
+                        yearMap.get(row.year)!.push(row)
+                      }
+                      return (
+                        <React.Fragment key={metricKey}>
+                          <tr style={{ background: '#d9e1f2' }}>
+                            <td colSpan={totalCols} style={{ ...TDL, fontWeight: 700, paddingLeft: 10, color: 'var(--clr-blue)', borderBottom: '1px solid #b8c9e0' }}>
+                              Sum of {metricCol}
+                            </td>
+                          </tr>
+                          {[...yearMap.entries()].sort(([a], [b]) => a - b).map(([year, monthRows]) => {
+                            const sorted = [...monthRows].sort((a, b) => (a.month ?? 0) - (b.month ?? 0))
+                            return (
+                              <React.Fragment key={year}>
+                                <tr style={{ background: '#ebf3fb' }}>
+                                  <td style={{ ...TDL, paddingLeft: 14, fontWeight: 700 }}>{year}</td>
+                                  {valCells(colTotals(monthRows), true)}
+                                </tr>
+                                {sorted.map((row, ri) => (
+                                  <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                                    <td style={{ ...TDL, paddingLeft: 28 }}>
+                                      {`01.${String(row.month ?? 0).padStart(2, '0')}.${row.year}`}
+                                    </td>
+                                    {valCells(row.values)}
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            )
+                          })}
+                        </React.Fragment>
+                      )
+                    }
+
+                    return (
+                      <React.Fragment key={metricKey}>
+                        <tr style={{ background: '#d9e1f2' }}>
+                          <td colSpan={totalCols} style={{ ...TDL, fontWeight: 700, paddingLeft: 10, color: 'var(--clr-blue)', borderBottom: '1px solid #b8c9e0' }}>
+                            Sum of {metricCol}
+                          </td>
+                        </tr>
+                        {rows.map((row, ri) => (
+                          <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                            <td style={{ ...TDL, paddingLeft: 24 }}>{row.year}</td>
+                            {valCells(row.values)}
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    )
+                  })}
+
+                  {/* All total rows at the very bottom */}
+                  {[...metricGroups.entries()].map(([metricKey, rows]) => (
+                    <tr key={`total-${metricKey}`} style={{ background: '#b8cce4', borderTop: '2px solid #8ea9d8' }}>
+                      <td style={{ ...TDL, fontWeight: 700, paddingLeft: 10 }}>
+                        Total Sum of {rows[0].metric_column}
+                      </td>
+                      {valCells(colTotals(rows), true)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

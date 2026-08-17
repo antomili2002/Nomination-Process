@@ -140,12 +140,13 @@ def test_non_uk_report_groups_selected_metrics_by_iv_ev_category_and_period(
     assert [column["label"] for column in iv_yearly["columns"]] == [
         "Base_IV",
         "Final_IV",
-        "Final_IV - Base_IV",
+        "Delta 1",
     ]
     assert [row["metric_key"] for row in iv_yearly["rows"]] == ["iv", "pp"]
     assert iv_yearly["rows"][0] == {
         "metric_key": "iv",
         "metric_label": "Intrinsic Value",
+        "metric_column": "INTRINSIC_VALUE__CUR",
         "year": 2026,
         "values": [4000.0, 7200.0, 3200.0],
     }
@@ -159,6 +160,7 @@ def test_non_uk_report_groups_selected_metrics_by_iv_ev_category_and_period(
     assert iv_monthly["rows"][0] == {
         "metric_key": "iv",
         "metric_label": "Intrinsic Value",
+        "metric_column": "INTRINSIC_VALUE__CUR",
         "year": 2026,
         "month": 5,
         "values": [2000.0, 3600.0, 1600.0],

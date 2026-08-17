@@ -42,6 +42,7 @@ export interface NonUkReportColumn {
 export interface NonUkReportRow {
   metric_key: string
   metric_label: string
+  metric_column: string
   year: number
   month?: number | null
   values: number[]

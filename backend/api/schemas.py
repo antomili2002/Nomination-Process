@@ -128,6 +128,7 @@ class NonUkReportColumn(BaseModel):
 class NonUkReportRow(BaseModel):
     metric_key: str
     metric_label: str
+    metric_column: str
     year: int
     month: Optional[int] = None
     values: list[float]
