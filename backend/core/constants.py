@@ -7,6 +7,9 @@ MONTH_COL         = "MONTH"
 TARIFF_COL        = "TARIFF"
 MACHINE_NAME_COL  = "MACHINE_NAME"
 UNIT_COUNTRY_COL  = "UNIT_COUNTRY"
+PLANT_NAME_COL    = "PLANT_NAME"
+UNIT_NAME_COL     = "UNIT_NAME"
+FUEL_NAME_COL     = "FUEL_NAME"
 POWER_POS_COL     = "POWER_POS__GWH"
 IV_COL            = "INTRINSIC_VALUE__CUR"
 EV_COL            = "EXTRINSIC_VALUE"
@@ -32,11 +35,16 @@ DIMENSION_COLS = [
     TARIFF_COL,
     MACHINE_NAME_COL,
     UNIT_COUNTRY_COL,
+    PLANT_NAME_COL,   # optional — registered so it is never auto-discovered as a metric
+    UNIT_NAME_COL,
+    FUEL_NAME_COL,
 ]
+
+_OPTIONAL_DIMENSION_COLS = {UNIT_COUNTRY_COL, PLANT_NAME_COL, UNIT_NAME_COL, FUEL_NAME_COL}
 
 # Minimum columns required in the Data sheet
 REQUIRED_DATA_COLS = [
-    column for column in DIMENSION_COLS if column != UNIT_COUNTRY_COL
+    column for column in DIMENSION_COLS if column not in _OPTIONAL_DIMENSION_COLS
 ] + METRIC_COLS
 
 # Value in the first column of the Info sheet header row

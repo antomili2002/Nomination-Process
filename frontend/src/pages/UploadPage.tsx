@@ -99,6 +99,12 @@ export function UploadPage({ onSuccess }: Props) {
           category: m.category,
           defaultSelected: m.default_selected,
         })),
+        filterOptions: {
+          machines: data.filter_options?.machines ?? data.machines,
+          plantNames: data.filter_options?.plant_names ?? [],
+          unitNames: data.filter_options?.unit_names ?? [],
+          fuelNames: data.filter_options?.fuel_names ?? [],
+        },
       })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Upload failed.')

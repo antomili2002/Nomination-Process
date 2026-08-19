@@ -18,6 +18,8 @@ from typing import Optional
 import pandas as pd
 
 from backend.core.config import settings
+from backend.core.constants import FUEL_NAME_COL, PLANT_NAME_COL, UNIT_NAME_COL
+from backend.domain.dimension_filters import DimensionFilters
 from backend.domain.layout import LAYOUT_NON_UK, layout_for_country
 from backend.domain.report_metrics import REPORT_METRICS, ReportMetric, available_metrics
 from backend.domain.workbook import WorkbookData
@@ -75,6 +77,7 @@ def _prepare_chain_context(
     iv_chain: list[int],
     ev_chain: list[int],
     selected_machines: Optional[list[str]],
+    dimension_filters: Optional[DimensionFilters] = None,
 ) -> _ChainContext:
     """Validate both chains and assemble the shared aggregation context."""
     data_df = workbook.clean_data_df
@@ -84,6 +87,12 @@ def _prepare_chain_context(
     validate_chain(iv_chain, available)
     validate_chain(ev_chain, available)
 
+    resolved_machines = selected_machines
+    if dimension_filters is not None:
+        data_df = _apply_extra_filters(data_df, dimension_filters)
+        if dimension_filters.machine_names is not None:
+            resolved_machines = dimension_filters.machine_names
+
     return _ChainContext(
         data_df=data_df,
         index_to_name=index_to_name,
@@ -91,9 +100,21 @@ def _prepare_chain_context(
         ev_chain=ev_chain,
         iv_pairs=build_delta_pairs(iv_chain, index_to_name),
         ev_pairs=build_delta_pairs(ev_chain, index_to_name),
-        selected_machines=selected_machines,
-        cache=ReportAggregationCache(data_df, selected_machines),
+        selected_machines=resolved_machines,
+        cache=ReportAggregationCache(data_df, resolved_machines),
     )
+
+
+def _apply_extra_filters(df: pd.DataFrame, filters: DimensionFilters) -> pd.DataFrame:
+    """Pre-filter plant/unit/fuel at context-build time; machine handled by builders."""
+    for col, selected in [
+        (PLANT_NAME_COL, filters.plant_names),
+        (UNIT_NAME_COL, filters.unit_names),
+        (FUEL_NAME_COL, filters.fuel_names),
+    ]:
+        if selected is not None and col in df.columns:
+            df = df[df[col].isin(selected)]
+    return df
 
 
 def _select_metrics(
@@ -185,15 +206,13 @@ def generate_report(
     ev_chain: list[int],
     selected_machines: Optional[list[str]],
     selected_metrics: Optional[list[str]] = None,
+    dimension_filters: Optional[DimensionFilters] = None,
 ) -> dict:
-    """Compute all monthly and yearly-delta tables for the configured chains.
-
-    Returns a plain dict whose structure mirrors ``GenerateReportResponse``.
-    The ``report_id`` is a freshly generated UUID.
-    """
+    """Compute all monthly and yearly-delta tables for the configured chains."""
     workbook = _load_workbook_data(upload_id)
     return generate_report_from_workbook(
-        workbook, upload_id, iv_chain, ev_chain, selected_machines, selected_metrics
+        workbook, upload_id, iv_chain, ev_chain, selected_machines, selected_metrics,
+        dimension_filters,
     )
 
 
@@ -204,14 +223,10 @@ def generate_report_from_workbook(
     ev_chain: list[int],
     selected_machines: Optional[list[str]],
     selected_metrics: Optional[list[str]] = None,
+    dimension_filters: Optional[DimensionFilters] = None,
 ) -> dict:
-    """Build the report payload for the workbook's portfolio layout.
-
-    The country → layout decision lives in ``layout_for_country``; each layout
-    contributes only its own section list, so a new layout is added by writing a
-    builder and a dispatch branch rather than editing the existing ones.
-    """
-    ctx = _prepare_chain_context(workbook, iv_chain, ev_chain, selected_machines)
+    """Build the report payload for the workbook's portfolio layout."""
+    ctx = _prepare_chain_context(workbook, iv_chain, ev_chain, selected_machines, dimension_filters)
     metrics = _select_metrics(ctx.data_df, selected_metrics)
     layout = layout_for_country(workbook.portfolio_country)
 

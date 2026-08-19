@@ -1,5 +1,19 @@
 import type { PivotTableData } from '../components/PivotTable'
 
+export interface FilterOptions {
+  machines: string[]
+  plantNames: string[]
+  unitNames: string[]
+  fuelNames: string[]
+}
+
+export interface DimensionFilters {
+  machineNames: string[] | null
+  plantNames: string[] | null
+  unitNames: string[] | null
+  fuelNames: string[] | null
+}
+
 export interface YearlyDeltaRow {
   year: number
   left_value: number
@@ -69,5 +83,6 @@ export interface ReportData {
   selectedMetrics: string[]
   metrics: MetricSection[]
   nonUkSections: NonUkReportSection[]
+  filterOptions: FilterOptions
 }
 

@@ -1,8 +1,9 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import { Download, FilePlus2, SlidersHorizontal } from 'lucide-react'
 import { buildApiUrl } from '../api'
-import type { ReportData } from '../types/report'
+import type { DimensionFilters, ReportData } from '../types/report'
 import { buildSections, findMetric, sectionCount } from '../reportMetrics'
+import { DimensionFilterPanel } from '../components/report/DimensionFilterPanel'
 import {
   ExcelPivotSection,
   NonUkCategorySections,
@@ -30,10 +31,11 @@ function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
     ivChain:         base.ivChain,
     evChain:         base.evChain,
     machines:        base.machines,
-    selectedMachines: base.selectedMachines,  // overwritten by caller
+    selectedMachines: base.selectedMachines,
     selectedMetrics: base.selectedMetrics,
     metrics: p.metrics as ReportData['metrics'],
     nonUkSections: p.non_uk_sections as ReportData['nonUkSections'],
+    filterOptions: base.filterOptions,
   }
 }
 
@@ -65,7 +67,65 @@ export function ResultPage({ reportData, onReset }: Props) {
   const [recomputing, setRecomputing]   = useState(false)
   const [recomputeError, setRecomputeError] = useState<string | null>(null)
 
-  // -- Download state -------------------------------------------------------
+  // -- Dimension filter comparison ------------------------------------------
+  const [filteredData, setFilteredData] = useState<ReportData | null>(null)
+  const [filterCache, setFilterCache]   = useState<Map<string, ReportData>>(new Map())
+  const [filtering, setFiltering]       = useState(false)
+  const [activeFilters, setActiveFilters] = useState<DimensionFilters | null>(null)
+
+  function filterKey(f: DimensionFilters): string {
+    return JSON.stringify({
+      m: [...(f.machineNames ?? [])].sort(),
+      p: [...(f.plantNames ?? [])].sort(),
+      u: [...(f.unitNames ?? [])].sort(),
+      f: [...(f.fuelNames ?? [])].sort(),
+    })
+  }
+
+  function filterLabel(f: DimensionFilters): string {
+    const parts: string[] = []
+    if (f.plantNames?.length)   parts.push(`Plant: ${f.plantNames.join(', ')}`)
+    if (f.unitNames?.length)    parts.push(`Unit: ${f.unitNames.join(', ')}`)
+    if (f.machineNames?.length) parts.push(`Machine: ${f.machineNames.join(', ')}`)
+    if (f.fuelNames?.length)    parts.push(`Fuel: ${f.fuelNames.join(', ')}`)
+    return parts.join(' · ') || 'Filtered'
+  }
+
+  async function applyDimensionFilter(filters: DimensionFilters | null) {
+    setActiveFilters(filters)
+    if (!filters) { setFilteredData(null); return }
+    const key = filterKey(filters)
+    if (filterCache.has(key)) { setFilteredData(filterCache.get(key)!); return }
+    setFiltering(true)
+    try {
+      const resp = await fetch(buildApiUrl('/reports/generate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          upload_id: reportData.uploadId,
+          iv_chain:  reportData.ivChain,
+          ev_chain:  reportData.evChain,
+          selected_machines: null,
+          selected_metrics:  reportData.selectedMetrics,
+          dimension_filters: {
+            machine_names: filters.machineNames,
+            plant_names:   filters.plantNames,
+            unit_names:    filters.unitNames,
+            fuel_names:    filters.fuelNames,
+          },
+        }),
+      })
+      if (!resp.ok) throw new Error(`Filter failed (${resp.status})`)
+      const p = await resp.json()
+      const nd: ReportData = { ...mapPayload(p, reportData), selectedMachines: null }
+      setFilterCache(prev => new Map(prev).set(key, nd))
+      setFilteredData(nd)
+    } catch {
+      setFilteredData(null)
+    } finally {
+      setFiltering(false)
+    }
+  }
   const [downloading, setDownloading] = useState(false)
 
   // Machine popover
@@ -421,19 +481,70 @@ export function ResultPage({ reportData, onReset }: Props) {
             </div>
           )}
 
-          {isNonUk && <NonUkCategorySections sections={activeNonUkSections} />}
-          {!isNonUk && activeSection?.tableType === 'monthly' && (
-            <ExcelPivotSection
-              tables={findMetric(activeData.metrics, activeSection.metricKey)?.monthly ?? []}
-              isDelta={false}
-            />
-          )}
-          {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
-            <YearlyDeltaSection
-              tables={findMetric(activeData.metrics, activeSection.metricKey)?.deltas ?? []}
-              metric={activeSection.column}
-            />
-          )}
+          <DimensionFilterPanel
+            options={reportData.filterOptions}
+            onApply={applyDimensionFilter}
+            loading={filtering}
+          />
+
+          <div style={{ display: 'flex', gap: 24 }}>
+            {/* Original pane */}
+            <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+              {filteredData && (
+                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-text-muted)' }}>
+                  Original — All
+                </p>
+              )}
+              {isNonUk && <NonUkCategorySections sections={activeNonUkSections} />}
+              {!isNonUk && activeSection?.tableType === 'monthly' && (
+                <ExcelPivotSection
+                  tables={findMetric(activeData.metrics, activeSection.metricKey)?.monthly ?? []}
+                  isDelta={false}
+                />
+              )}
+              {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
+                <YearlyDeltaSection
+                  tables={findMetric(activeData.metrics, activeSection.metricKey)?.deltas ?? []}
+                  metric={activeSection.column}
+                />
+              )}
+            </div>
+
+            {/* Filtered comparison pane */}
+            {(filteredData || filtering) && (
+              <div style={{ flex: 1, minWidth: 0, overflowX: 'auto', borderLeft: '2px solid var(--clr-blue)', paddingLeft: 24 }}>
+                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-blue)' }}>
+                  {activeFilters ? filterLabel(activeFilters) : 'Filtered'}
+                </p>
+                {filtering && (
+                  <div style={{ padding: 32, textAlign: 'center', color: 'var(--clr-text-muted)' }}>
+                    <span className="spinner" aria-hidden="true" />
+                    <span style={{ marginLeft: 8 }}>Computing…</span>
+                  </div>
+                )}
+                {!filtering && filteredData && (() => {
+                  const filteredNonUkSections = filteredData.nonUkSections.filter(
+                    s => s.output_type === nonUkOutputType && s.period === nonUkPeriod
+                  )
+                  return <>
+                    {isNonUk && <NonUkCategorySections sections={filteredNonUkSections} />}
+                    {!isNonUk && activeSection?.tableType === 'monthly' && (
+                      <ExcelPivotSection
+                        tables={findMetric(filteredData.metrics, activeSection.metricKey)?.monthly ?? []}
+                        isDelta={false}
+                      />
+                    )}
+                    {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
+                      <YearlyDeltaSection
+                        tables={findMetric(filteredData.metrics, activeSection.metricKey)?.deltas ?? []}
+                        metric={activeSection.column}
+                      />
+                    )}
+                  </>
+                })()}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

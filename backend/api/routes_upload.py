@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
-from backend.api.schemas import MetricInfo, ScenarioInfoRow, UploadResponse
+from backend.api.schemas import FilterOptions as FilterOptionsSchema, MetricInfo, ScenarioInfoRow, UploadResponse
 from backend.core.exceptions import (
     InvalidUploadError,
     InvalidWorkbookError,
@@ -28,6 +28,7 @@ def upload_workbook(file: UploadFile = File(...)):
 
 
 def _to_response(upload: UploadedWorkbook) -> UploadResponse:
+    fo = upload.filter_options
     return UploadResponse(
         upload_id=upload.upload_id,
         file_name=upload.file_name,
@@ -45,4 +46,10 @@ def _to_response(upload: UploadedWorkbook) -> UploadResponse:
             )
             for m in upload.available_metrics
         ],
+        filter_options=FilterOptionsSchema(
+            machines=fo.machines,
+            plant_names=fo.plant_names,
+            unit_names=fo.unit_names,
+            fuel_names=fo.fuel_names,
+        ),
     )

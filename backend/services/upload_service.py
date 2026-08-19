@@ -5,8 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from fastapi import UploadFile
 
-from backend.core.constants import MACHINE_NAME_COL, UNIT_COUNTRY_COL
+from backend.core.constants import MACHINE_NAME_COL, PLANT_NAME_COL, UNIT_NAME_COL, FUEL_NAME_COL, UNIT_COUNTRY_COL
 from backend.core.config import settings
+from backend.domain.dimension_filters import FilterOptions
 from backend.domain.report_metrics import available_metrics
 from backend.domain.workbook import ScenarioInfo, UploadedWorkbook, WorkbookData
 from backend.processing.cleaning import clean_data
@@ -24,6 +25,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
     machines = _extract_machines(clean_data_df)
     portfolio_country = detect_portfolio_country(clean_data_df)
     as_of_date = _extract_as_of_date(clean_data_df)
+    filter_options = _extract_filter_options(clean_data_df)
 
     save_workbook_data(
         settings.upload_dir / upload_id,
@@ -45,6 +47,7 @@ def process_upload(file: UploadFile) -> UploadedWorkbook:
         available_metrics=list(available_metrics(clean_data_df)),
         portfolio_country=portfolio_country,
         as_of_date=as_of_date,
+        filter_options=filter_options,
     )
 
 
@@ -80,6 +83,25 @@ def _extract_machines(data_df: pd.DataFrame) -> list[str]:
     if MACHINE_NAME_COL not in data_df.columns:
         return []
     return sorted(data_df[MACHINE_NAME_COL].dropna().unique().tolist())
+
+
+def _extract_filter_options(data_df: pd.DataFrame) -> FilterOptions:
+    """Extract sorted unique values for each optional filter dimension."""
+    def _vals(col: str) -> list[str]:
+        if col not in data_df.columns:
+            return []
+        return sorted(
+            data_df[col].dropna().astype(str).str.strip()
+            .pipe(lambda s: s[s.ne("") & s.str.lower().ne("nan")])
+            .unique().tolist()
+        )
+
+    return FilterOptions(
+        machines=_extract_machines(data_df),
+        plant_names=_vals(PLANT_NAME_COL),
+        unit_names=_vals(UNIT_NAME_COL),
+        fuel_names=_vals(FUEL_NAME_COL),
+    )
 
 
 def detect_portfolio_country(data_df: pd.DataFrame) -> str:

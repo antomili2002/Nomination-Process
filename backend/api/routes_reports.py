@@ -15,6 +15,7 @@ from backend.api.schemas import (
     DataPreviewRequest,
     DataPreviewResponse,
     DeltaPairInfo,
+    DimensionFiltersSchema,
     GenerateReportResponse,
     MetricReportSection,
     NonUkReportColumn,
@@ -27,6 +28,7 @@ from backend.api.schemas import (
     YearlyDeltaTable,
 )
 from backend.core.exceptions import InvalidChainError, InvalidWorkbookError, ScenarioExtractionError
+from backend.domain.dimension_filters import DimensionFilters
 from backend.services import report_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -115,8 +117,18 @@ def data_preview(body: DataPreviewRequest):
 def generate_report(body: ReportGenerationRequest):
     """Compute all tables for the configured chains and return the report payload."""
     try:
+        dim_filters: DimensionFilters | None = None
+        if body.dimension_filters:
+            df = body.dimension_filters
+            dim_filters = DimensionFilters(
+                machine_names=df.machine_names,
+                plant_names=df.plant_names,
+                unit_names=df.unit_names,
+                fuel_names=df.fuel_names,
+            )
         result = report_service.generate_report(
-            body.upload_id, body.iv_chain, body.ev_chain, body.selected_machines, body.selected_metrics
+            body.upload_id, body.iv_chain, body.ev_chain,
+            body.selected_machines, body.selected_metrics, dim_filters,
         )
     except Exception as exc:
         raise _to_http(exc)

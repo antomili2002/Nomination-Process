@@ -5,7 +5,7 @@ import { StepIndicator } from './components/StepIndicator'
 import { UploadPage } from './pages/UploadPage'
 import { ConfigurePage } from './pages/ConfigurePage'
 import { ResultPage } from './pages/ResultPage'
-import type { MetricInfo, ReportData } from './types/report'
+import type { FilterOptions, MetricInfo, ReportData } from './types/report'
 export type { ReportData } from './types/report'
 
 export type AppStep = 'upload' | 'configure' | 'result'
@@ -18,6 +18,7 @@ export interface UploadContext {
   scenarios: ScenarioRow[]
   machines: string[]
   availableMetrics: MetricInfo[]
+  filterOptions: FilterOptions
 }
 
 export interface ScenarioRow {

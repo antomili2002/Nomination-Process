@@ -21,6 +21,20 @@ class MetricInfo(BaseModel):
     default_selected: bool
 
 
+class FilterOptions(BaseModel):
+    machines: list[str] = []
+    plant_names: list[str] = []
+    unit_names: list[str] = []
+    fuel_names: list[str] = []
+
+
+class DimensionFiltersSchema(BaseModel):
+    machine_names: Optional[list[str]] = None
+    plant_names: Optional[list[str]] = None
+    unit_names: Optional[list[str]] = None
+    fuel_names: Optional[list[str]] = None
+
+
 class UploadResponse(BaseModel):
     upload_id: str
     file_name: str
@@ -29,6 +43,7 @@ class UploadResponse(BaseModel):
     scenarios: list[ScenarioInfoRow]
     machines: list[str]
     available_metrics: list[MetricInfo]
+    filter_options: FilterOptions = FilterOptions()
 
 
 class ReportGenerationRequest(BaseModel):
@@ -37,6 +52,7 @@ class ReportGenerationRequest(BaseModel):
     ev_chain: list[int] = Field(..., min_length=2)
     selected_machines: Optional[list[str]] = None
     selected_metrics: Optional[list[str]] = None
+    dimension_filters: Optional[DimensionFiltersSchema] = None
 
 
 class DeltaPairInfo(BaseModel):

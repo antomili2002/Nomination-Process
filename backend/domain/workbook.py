@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
+from backend.domain.dimension_filters import FilterOptions
 from backend.domain.report_metrics import ReportMetric
 
 
@@ -27,6 +28,7 @@ class UploadedWorkbook:
     available_metrics: list[ReportMetric]
     portfolio_country: str
     as_of_date: str | None
+    filter_options: FilterOptions = field(default_factory=FilterOptions)
 
 
 @dataclass(frozen=True)
