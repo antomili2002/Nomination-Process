@@ -1,5 +1,5 @@
-﻿import { useEffect, useRef, useState } from 'react'
-import { Download, FilePlus2, SlidersHorizontal } from 'lucide-react'
+﻿import { useState } from 'react'
+import { Download, FilePlus2 } from 'lucide-react'
 import { buildApiUrl } from '../api'
 import type { DimensionFilters, ReportData } from '../types/report'
 import { buildSections, findMetric, sectionCount } from '../reportMetrics'
@@ -13,12 +13,6 @@ import {
 interface Props {
   reportData: ReportData
   onReset: () => void
-}
-
-// Cache helpers 
-function cacheKey(sel: string[] | null, all: string[]): string {
-  if (!sel || sel.length === all.length) return 'ALL'
-  return JSON.stringify([...sel].sort())
 }
 
 function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
@@ -40,10 +34,8 @@ function mapPayload(p: Record<string, unknown>, base: ReportData): ReportData {
 }
 
 export function ResultPage({ reportData, onReset }: Props) {
-  const { uploadId, ivChain, evChain, machines, selectedMetrics } = reportData
   const isNonUk = reportData.layout === 'non_uk'
 
-  // Metric structure (key/label/column) is stable across machine-filter recomputes.
   const sections = buildSections(reportData.metrics)
 
   // -- Section navigation ---------------------------------------------------
@@ -52,26 +44,12 @@ export function ResultPage({ reportData, onReset }: Props) {
   const [nonUkOutputType, setNonUkOutputType] = useState<'IV' | 'EV'>('IV')
   const [nonUkPeriod, setNonUkPeriod] = useState<'monthly' | 'yearly'>('yearly')
 
-  // -- Machine filter + cache -----------------------------------------------
-  // activeData is what gets rendered; initialised from the passed-in reportData.
-  const [activeData, setActiveData]     = useState<ReportData>(reportData)
-  const [activeKey, setActiveKey]       = useState<string>(() => cacheKey(reportData.selectedMachines, machines))
-
-  // Cache: cacheKey to ReportData. Pre-seed with the initial result.
-  const [cache, setCache] = useState<Map<string, ReportData>>(() => {
-    const m = new Map<string, ReportData>()
-    m.set(cacheKey(reportData.selectedMachines, machines), reportData)
-    return m
-  })
-
-  const [recomputing, setRecomputing]   = useState(false)
-  const [recomputeError, setRecomputeError] = useState<string | null>(null)
-
   // -- Dimension filter comparison ------------------------------------------
   const [filteredData, setFilteredData] = useState<ReportData | null>(null)
   const [filterCache, setFilterCache]   = useState<Map<string, ReportData>>(new Map())
   const [filtering, setFiltering]       = useState(false)
   const [activeFilters, setActiveFilters] = useState<DimensionFilters | null>(null)
+  const [downloading, setDownloading]   = useState(false)
 
   function filterKey(f: DimensionFilters): string {
     return JSON.stringify({
@@ -126,34 +104,8 @@ export function ResultPage({ reportData, onReset }: Props) {
       setFiltering(false)
     }
   }
-  const [downloading, setDownloading] = useState(false)
 
-  // Machine popover
-  const [showMenu, setShowMenu]         = useState(false)
-  const [pendingSel, setPendingSel]     = useState<Set<string>>(
-    () => new Set(reportData.selectedMachines ?? machines)
-  )
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  // Close popover on outside click
-  useEffect(() => {
-    if (!showMenu) return
-    function onDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node))
-        setShowMenu(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [showMenu])
-
-  function togglePending(m: string) {
-    setPendingSel(prev => {
-      const next = new Set(prev)
-      if (next.has(m)) { if (next.size > 1) next.delete(m) }
-      else next.add(m)
-      return next
-    })
-  }
+  // -- Download state -------------------------------------------------------
 
   async function handleDownload() {
     setDownloading(true)
@@ -162,11 +114,17 @@ export function ResultPage({ reportData, onReset }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          upload_id: activeData.uploadId,
-          iv_chain:  activeData.ivChain,
-          ev_chain:  activeData.evChain,
-          selected_machines: activeData.selectedMachines,
-          selected_metrics: activeData.selectedMetrics,
+          upload_id: reportData.uploadId,
+          iv_chain:  reportData.ivChain,
+          ev_chain:  reportData.evChain,
+          selected_machines: null,
+          selected_metrics: reportData.selectedMetrics,
+          dimension_filters: activeFilters ? {
+            machine_names: activeFilters.machineNames,
+            plant_names:   activeFilters.plantNames,
+            unit_names:    activeFilters.unitNames,
+            fuel_names:    activeFilters.fuelNames,
+          } : null,
         }),
       })
       if (!resp.ok) {
@@ -194,48 +152,8 @@ export function ResultPage({ reportData, onReset }: Props) {
     }
   }
 
-  async function applyMachineFilter() {
-    const sel = pendingSel.size === machines.length ? null : [...pendingSel].sort()
-    const key = cacheKey(sel, machines)
-    setShowMenu(false)
-    setRecomputeError(null)
-
-    if (cache.has(key)) {
-      setActiveData(cache.get(key)!)
-      setActiveKey(key)
-      return
-    }
-
-    setRecomputing(true)
-    try {
-      const resp = await fetch(buildApiUrl('/reports/generate'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          upload_id: uploadId, iv_chain: ivChain, ev_chain: evChain,
-          selected_machines: sel, selected_metrics: selectedMetrics,
-        }),
-      })
-      if (!resp.ok) {
-        const d = await resp.json().catch(() => ({}))
-        throw new Error((d as { detail?: string })?.detail ?? `Recompute failed (${resp.status})`)
-      }
-      const p = await resp.json()
-      const newData: ReportData = { ...mapPayload(p, reportData), selectedMachines: sel }
-      setCache(prev => new Map(prev).set(key, newData))
-      setActiveData(newData)
-      setActiveKey(key)
-    } catch (e) {
-      setRecomputeError(e instanceof Error ? e.message : 'Recompute failed.')
-    } finally {
-      setRecomputing(false)
-    }
-  }
-
-  // Derived: is any filter active?
-  const isFiltered = activeKey !== 'ALL'
-  const activeMachineCount = isFiltered ? JSON.parse(activeKey).length : machines.length
-  const activeNonUkSections = activeData.nonUkSections.filter(
+  // Derived: sections visible in the non-UK view for the active output type/period
+  const activeNonUkSections = reportData.nonUkSections.filter(
     section => section.output_type === nonUkOutputType && section.period === nonUkPeriod
   )
 
@@ -298,7 +216,7 @@ export function ResultPage({ reportData, onReset }: Props) {
                 {metric.label}
               </p>
               {groupSections.map(sec => {
-                const count = sectionCount(activeData.metrics, sec.metricKey, sec.tableType)
+                const count = sectionCount(reportData.metrics, sec.metricKey, sec.tableType)
                 const isActive = activeId === sec.id
                 return (
                   <button
@@ -354,11 +272,11 @@ export function ResultPage({ reportData, onReset }: Props) {
                 ? `${activeNonUkSections.length} categor${activeNonUkSections.length === 1 ? 'y' : 'ies'}`
                 : <>
                     Sum of <code style={{ background: 'var(--clr-bg)', padding: '1px 4px', borderRadius: 3 }}>{activeSection?.column}</code>
-                    {' · '}{sectionCount(activeData.metrics, activeSection?.metricKey ?? '', activeSection?.tableType ?? 'monthly')} table{sectionCount(activeData.metrics, activeSection?.metricKey ?? '', activeSection?.tableType ?? 'monthly') !== 1 ? 's' : ''}
+                    {' · '}{sectionCount(reportData.metrics, activeSection?.metricKey ?? '', activeSection?.tableType ?? 'monthly')} table{sectionCount(reportData.metrics, activeSection?.metricKey ?? '', activeSection?.tableType ?? 'monthly') !== 1 ? 's' : ''}
                   </>}
-              {isFiltered && (
+              {activeFilters && (
                 <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10, background: 'var(--clr-blue-light)', color: 'var(--clr-blue)', fontWeight: 600 }}>
-                  {activeMachineCount}/{machines.length} machines
+                  {filterLabel(activeFilters)}
                 </span>
               )}
             </p>
@@ -366,98 +284,16 @@ export function ResultPage({ reportData, onReset }: Props) {
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexShrink: 0, alignItems: 'center' }}>
-            {/* Machine filter button + popover */}
-            <div style={{ position: 'relative' }} ref={menuRef}>
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => {
-                  setPendingSel(new Set(isFiltered ? JSON.parse(activeKey) as string[] : machines))
-                  setShowMenu(v => !v)
-                }}
-                style={{
-                  borderColor: isFiltered ? 'var(--clr-blue)' : undefined,
-                  color: isFiltered ? 'var(--clr-blue)' : undefined,
-                  fontWeight: isFiltered ? 700 : undefined,
-                }}
-              >
-                <SlidersHorizontal size={14} aria-hidden="true" /> {isFiltered ? `Machines (${activeMachineCount}/${machines.length})` : 'Machines (All)'}
-              </button>
-
-              {showMenu && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200,
-                  background: '#fff', border: '1px solid var(--clr-border)',
-                  borderRadius: 'var(--radius-md)', boxShadow: '0 6px 24px rgba(0,0,0,0.13)',
-                  padding: 'var(--sp-4)', minWidth: 300,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--sp-3)' }}>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 'var(--text-sm)' }}>Machine Filter</p>
-                    <div style={{ display: 'flex', gap: 'var(--sp-1)' }}>
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => setPendingSel(new Set(machines))}
-                        disabled={pendingSel.size === machines.length}
-                      >All</button>
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => setPendingSel(new Set([machines[0]]))}
-                        disabled={pendingSel.size === 1}
-                      >Clear</button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)', maxHeight: 200, overflowY: 'auto' }}>
-                    {machines.map(m => {
-                      const sel = pendingSel.has(m)
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => togglePending(m)}
-                          style={{
-                            padding: '4px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                            fontSize: 'var(--text-xs)', fontWeight: sel ? 600 : 'normal',
-                            background: sel ? 'var(--clr-blue)' : 'var(--clr-bg)',
-                            color: sel ? '#fff' : 'var(--clr-text-muted)',
-                            border: `1px solid ${sel ? 'var(--clr-blue)' : 'var(--clr-border)'}`,
-                            transition: 'all 0.1s',
-                          }}
-                        >{m}</button>
-                      )
-                    })}
-                  </div>
-
-                  <div style={{ borderTop: '1px solid var(--clr-border)', paddingTop: 'var(--sp-3)', display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                    <button
-                      className="btn btn--primary btn--sm"
-                      onClick={applyMachineFilter}
-                      disabled={pendingSel.size === 0 || recomputing}
-                      style={{ flex: 1 }}
-                    >
-                      {recomputing
-                        ? <><span className="spinner spinner--sm" aria-hidden="true" />Computing…</>
-                        : cacheKey([...pendingSel].sort(), machines) === activeKey
-                          ? 'Current selection'
-                          : cache.has(cacheKey(pendingSel.size === machines.length ? null : [...pendingSel].sort(), machines))
-                            ? 'Restore (cached)'
-                            : 'Apply & Recompute'
-                      }
-                    </button>
-                  </div>
-
-                  {recomputeError && (
-                    <p style={{ marginTop: 'var(--sp-2)', fontSize: 'var(--text-xs)', color: '#c0392b' }}>
-                      {recomputeError}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
+            <DimensionFilterPanel
+              options={reportData.filterOptions}
+              activeFilters={activeFilters}
+              onApply={applyDimensionFilter}
+              loading={filtering}
+            />
             <button
               className="btn btn--ghost btn--sm"
               onClick={handleDownload}
-              disabled={downloading || recomputing}
+              disabled={downloading || filtering}
             >
               {downloading
                 ? <><span className="spinner spinner--sm" aria-hidden="true" />Downloading…</>
@@ -467,90 +303,69 @@ export function ResultPage({ reportData, onReset }: Props) {
           </div>
         </div>
 
-        {/* Recomputing overlay + tables */}
-        <div style={{ position: 'relative' }}>
-          {recomputing && (
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 10, borderRadius: 'var(--radius-md)',
-              background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <span className="spinner" aria-hidden="true" />
-              <span style={{ marginLeft: 10, fontSize: 'var(--text-sm)', color: 'var(--clr-text-muted)' }}>
-                Recomputing…
-              </span>
-            </div>
-          )}
-
-          <DimensionFilterPanel
-            options={reportData.filterOptions}
-            onApply={applyDimensionFilter}
-            loading={filtering}
-          />
-
-          <div style={{ display: 'flex', gap: 24 }}>
-            {/* Original pane */}
-            <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
-              {filteredData && (
-                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-text-muted)' }}>
-                  Original — All
-                </p>
-              )}
-              {isNonUk && <NonUkCategorySections sections={activeNonUkSections} />}
-              {!isNonUk && activeSection?.tableType === 'monthly' && (
-                <ExcelPivotSection
-                  tables={findMetric(activeData.metrics, activeSection.metricKey)?.monthly ?? []}
-                  isDelta={false}
-                />
-              )}
-              {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
-                <YearlyDeltaSection
-                  tables={findMetric(activeData.metrics, activeSection.metricKey)?.deltas ?? []}
-                  metric={activeSection.column}
-                />
-              )}
-            </div>
-
-            {/* Filtered comparison pane */}
-            {(filteredData || filtering) && (
-              <div style={{ flex: 1, minWidth: 0, overflowX: 'auto', borderLeft: '2px solid var(--clr-blue)', paddingLeft: 24 }}>
-                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-blue)' }}>
-                  {activeFilters ? filterLabel(activeFilters) : 'Filtered'}
-                </p>
-                {filtering && (
-                  <div style={{ padding: 32, textAlign: 'center', color: 'var(--clr-text-muted)' }}>
-                    <span className="spinner" aria-hidden="true" />
-                    <span style={{ marginLeft: 8 }}>Computing…</span>
-                  </div>
-                )}
-                {!filtering && filteredData && (() => {
-                  const filteredNonUkSections = filteredData.nonUkSections.filter(
-                    s => s.output_type === nonUkOutputType && s.period === nonUkPeriod
-                  )
-                  return <>
-                    {isNonUk && <NonUkCategorySections sections={filteredNonUkSections} />}
-                    {!isNonUk && activeSection?.tableType === 'monthly' && (
-                      <ExcelPivotSection
-                        tables={findMetric(filteredData.metrics, activeSection.metricKey)?.monthly ?? []}
-                        isDelta={false}
-                      />
-                    )}
-                    {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
-                      <YearlyDeltaSection
-                        tables={findMetric(filteredData.metrics, activeSection.metricKey)?.deltas ?? []}
-                        metric={activeSection.column}
-                      />
-                    )}
-                  </>
-                })()}
-              </div>
+        {/* Tables — side-by-side when a filter is active */}
+        <div style={{ display: 'flex', gap: 24 }}>
+          {/* Original pane */}
+          <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+            {filteredData && (
+              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-text-muted)' }}>
+                Original — All
+              </p>
+            )}
+            {isNonUk && <NonUkCategorySections sections={activeNonUkSections} />}
+            {!isNonUk && activeSection?.tableType === 'monthly' && (
+              <ExcelPivotSection
+                tables={findMetric(reportData.metrics, activeSection.metricKey)?.monthly ?? []}
+                isDelta={false}
+              />
+            )}
+            {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
+              <YearlyDeltaSection
+                tables={findMetric(reportData.metrics, activeSection.metricKey)?.deltas ?? []}
+                metric={activeSection.column}
+              />
             )}
           </div>
+
+          {/* Filtered comparison pane */}
+          {(filteredData || filtering) && (
+            <div style={{ flex: 1, minWidth: 0, overflowX: 'auto', borderLeft: '2px solid var(--clr-blue)', paddingLeft: 24 }}>
+              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-blue)' }}>
+                {activeFilters ? filterLabel(activeFilters) : 'Filtered'}
+              </p>
+              {filtering && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--clr-text-muted)' }}>
+                  <span className="spinner" aria-hidden="true" />
+                  <span style={{ marginLeft: 8 }}>Computing…</span>
+                </div>
+              )}
+              {!filtering && filteredData && (() => {
+                const filteredNonUkSections = filteredData.nonUkSections.filter(
+                  s => s.output_type === nonUkOutputType && s.period === nonUkPeriod
+                )
+                return <>
+                  {isNonUk && <NonUkCategorySections sections={filteredNonUkSections} />}
+                  {!isNonUk && activeSection?.tableType === 'monthly' && (
+                    <ExcelPivotSection
+                      tables={findMetric(filteredData.metrics, activeSection.metricKey)?.monthly ?? []}
+                      isDelta={false}
+                    />
+                  )}
+                  {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
+                    <YearlyDeltaSection
+                      tables={findMetric(filteredData.metrics, activeSection.metricKey)?.deltas ?? []}
+                      metric={activeSection.column}
+                    />
+                  )}
+                </>
+              })()}
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
-
 
 
 

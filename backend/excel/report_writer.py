@@ -24,19 +24,31 @@ def write_report(
     report_data: dict,
     info_df: pd.DataFrame,
     data_df: pd.DataFrame,
+    filtered_report_data: dict | None = None,
+    filter_summary: dict[str, str] | None = None,
 ) -> bytes:
     tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
     tmp_path = tmp.name
     tmp.close()
 
     try:
-        wb = xlsxwriter.Workbook(tmp_path, {"constant_memory": True})
+        # Disable constant-memory mode when writing a comparison so we can
+        # write filtered columns alongside original ones in the same rows.
+        wb = xlsxwriter.Workbook(tmp_path, {"constant_memory": filtered_report_data is None})
         formats = _create_formats(wb)
 
         if report_data.get("layout", LAYOUT_UK) == LAYOUT_NON_UK:
-            _write_non_uk_sheets(wb, report_data["non_uk_sections"], formats)
+            _write_non_uk_sheets(
+                wb, report_data["non_uk_sections"], formats,
+                filtered_sections=filtered_report_data["non_uk_sections"] if filtered_report_data else None,
+                filter_summary=filter_summary,
+            )
         else:
-            _write_uk_metric_sheets(wb, report_data["metrics"], formats)
+            _write_uk_metric_sheets(
+                wb, report_data["metrics"], formats,
+                filtered_metrics=filtered_report_data["metrics"] if filtered_report_data else None,
+                filter_summary=filter_summary,
+            )
 
         _df_to_sheet(wb, "Info", info_df, write_header=False, formats=formats)
         _df_to_sheet(wb, "Data", data_df, write_header=True, formats=formats)
@@ -54,26 +66,25 @@ def _write_uk_metric_sheets(
     wb: xlsxwriter.Workbook,
     metrics: list[dict],
     formats: dict,
+    filtered_metrics: list[dict] | None = None,
+    filter_summary: dict[str, str] | None = None,
 ) -> None:
     """Write one monthly + one delta sheet per metric for the UK layout."""
     used_prefixes: set[str] = set()
-    for metric in metrics:
+    for i, metric in enumerate(metrics):
         prefix = _unique_prefix(metric["excel_prefix"], used_prefixes)
+        filt = filtered_metrics[i] if filtered_metrics and i < len(filtered_metrics) else None
         _write_monthly_sheet(
-            wb,
-            f"{prefix}_month",
-            metric["monthly"],
-            metric["column"],
-            metric["output_type"],
-            formats,
+            wb, f"{prefix}_month",
+            metric["monthly"], metric["column"], metric["output_type"], formats,
+            filtered_pivot_tables=filt["monthly"] if filt else None,
+            filter_summary=filter_summary,
         )
         _write_delta_sheet(
-            wb,
-            f"{prefix}_sheet",
-            metric["deltas"],
-            metric["column"],
-            metric["output_type"],
-            formats,
+            wb, f"{prefix}_sheet",
+            metric["deltas"], metric["column"], metric["output_type"], formats,
+            filtered_delta_tables=filt["deltas"] if filt else None,
+            filter_summary=filter_summary,
         )
 
 
@@ -149,13 +160,10 @@ def _write_non_uk_sheets(
     wb: xlsxwriter.Workbook,
     sections: list[dict],
     formats: dict,
+    filtered_sections: list[dict] | None = None,
+    filter_summary: dict[str, str] | None = None,
 ) -> None:
-    """Write the four non-UK views using the shared blue pivot styling.
-
-    Layout mirrors the dashboard (single "Row Labels" column, "Sum of" bands,
-    year/month hierarchy, "Total Sum of" rows at the end); the palette is the
-    same ``formats`` used by the UK sheets so both look identical.
-    """
+    """Write the four non-UK views; optionally add filtered comparison to the right."""
     for output_type, period, sheet_name in (
         ("IV", "yearly", "IV_Yearly"),
         ("IV", "monthly", "IV_Monthly"),
@@ -164,21 +172,48 @@ def _write_non_uk_sheets(
     ):
         ws = wb.add_worksheet(sheet_name)
         ws.hide_gridlines(2)
+
+        matching = [
+            s for s in sections
+            if s["output_type"] == output_type and s["period"] == period
+        ]
+        matching_filtered = [
+            s for s in (filtered_sections or [])
+            if s["output_type"] == output_type and s["period"] == period
+        ]
+        has_comparison = bool(matching_filtered and filter_summary)
+
+        # Compute column widths: Row Labels + N value columns
+        orig_width = (1 + len(matching[0]["columns"])) if matching else 2
+        # 2-column gap then filtered table
+        filt_col_start = orig_width + 3 if has_comparison else None
+
         ws.set_column(0, 0, 34)
-        ws.set_column(1, 20, 26)
+        ws.set_column(1, orig_width, 26)
+        if filt_col_start:
+            fc = filt_col_start - 1  # 0-indexed
+            ws.set_column(fc, fc, 34)
+            ws.set_column(fc + 1, fc + orig_width + 1, 26)
 
         _w(ws, 1, 1, "OUTPUT_TYPE", formats["blue"])
         _w(ws, 1, 2, output_type, formats["blue"])
         _w(ws, 2, 1, "MACHINE_NAME", formats["blue"])
         _w(ws, 2, 2, "(All)", formats["blue"])
 
+        if filt_col_start:
+            for row_i, (key, value) in enumerate(filter_summary.items(), start=1):  # type: ignore[union-attr]
+                _w(ws, row_i, filt_col_start, key, formats["blue"])
+                _w(ws, row_i, filt_col_start + 1, value, formats["blue"])
+
         row_num = 4
-        matching_sections = [
-            section for section in sections
-            if section["output_type"] == output_type and section["period"] == period
-        ]
-        for section in matching_sections:
-            row_num = _write_non_uk_category_table(ws, row_num, section, formats)
+        for i, section in enumerate(matching):
+            start_row = row_num
+            row_num = _write_non_uk_category_table(ws, row_num, section, formats, col_start=1)
+            if has_comparison and i < len(matching_filtered):
+                _write_non_uk_category_table(
+                    ws, start_row, matching_filtered[i], formats,
+                    col_start=filt_col_start,  # type: ignore[arg-type]
+                )
             row_num += 2
 
 
@@ -187,6 +222,7 @@ def _write_non_uk_category_table(
     row_num: int,
     section: dict,
     formats: dict,
+    col_start: int = 1,
 ) -> int:
     """One category table: caption, header, metric groups, then total rows."""
     columns: list[dict] = section["columns"]
@@ -194,29 +230,28 @@ def _write_non_uk_category_table(
     is_monthly = section["period"] == "monthly"
     value_count = len(columns)
 
-    _w(ws, row_num, 1, section["category"], formats["bold"])
+    _w(ws, row_num, col_start, section["category"], formats["bold"])
     row_num += 1
 
-    _w(ws, row_num, 1, "Row Labels", formats["bold_blue_bottom"])
+    _w(ws, row_num, col_start, "Row Labels", formats["bold_blue_bottom"])
     for index, column in enumerate(columns):
-        _w(ws, row_num, 2 + index, column["label"], formats["bold_blue_bottom"])
+        _w(ws, row_num, col_start + 1 + index, column["label"], formats["bold_blue_bottom"])
     row_num += 1
 
     groups, order = _group_rows_by_metric(rows)
 
     for metric_key in order:
         row_num = _write_non_uk_metric_group(
-            ws, row_num, columns, groups[metric_key], is_monthly, formats
+            ws, row_num, columns, groups[metric_key], is_monthly, formats, col_start=col_start
         )
 
-    # All "Total Sum of <metric>" rows collected at the very bottom.
     for metric_key in order:
         metric_rows = groups[metric_key]
         metric_col = metric_rows[0]["metric_column"]
         totals = [sum(r["values"][i] for r in metric_rows) for i in range(value_count)]
-        _w(ws, row_num, 1, f"Total Sum of {metric_col}", formats["bold_blue_top"])
+        _w(ws, row_num, col_start, f"Total Sum of {metric_col}", formats["bold_blue_top"])
         for i in range(value_count):
-            _w(ws, row_num, 2 + i, totals[i], formats["bold_blue_num_top"])
+            _w(ws, row_num, col_start + 1 + i, totals[i], formats["bold_blue_num_top"])
         row_num += 1
 
     return row_num
@@ -229,21 +264,22 @@ def _write_non_uk_metric_group(
     metric_rows: list[dict],
     is_monthly: bool,
     formats: dict,
+    col_start: int = 1,
 ) -> int:
     value_count = len(columns)
     metric_col = metric_rows[0]["metric_column"]
 
     # "Sum of <metric>" band: bold caption with a thin blue rule underneath.
-    _w(ws, row_num, 1, f"Sum of {metric_col}", formats["bold_bottom"])
+    _w(ws, row_num, col_start, f"Sum of {metric_col}", formats["bold_bottom"])
     for i in range(value_count):
-        _w(ws, row_num, 2 + i, None, formats["bold_bottom"])
+        _w(ws, row_num, col_start + 1 + i, None, formats["bold_bottom"])
     row_num += 1
 
     if not is_monthly:
         for row in metric_rows:
-            _w(ws, row_num, 1, int(row["year"]), formats["indent1"])
+            _w(ws, row_num, col_start, int(row["year"]), formats["indent1"])
             for i in range(value_count):
-                _w(ws, row_num, 2 + i, row["values"][i], formats["num"])
+                _w(ws, row_num, col_start + 1 + i, row["values"][i], formats["num"])
             row_num += 1
         return row_num
 
@@ -252,16 +288,16 @@ def _write_non_uk_metric_group(
     for year in sorted(year_order):
         year_rows = years[year]
         year_totals = [sum(r["values"][i] for r in year_rows) for i in range(value_count)]
-        _w(ws, row_num, 1, int(year), formats["bold_indent1"])
+        _w(ws, row_num, col_start, int(year), formats["bold_indent1"])
         for i in range(value_count):
-            _w(ws, row_num, 2 + i, year_totals[i], formats["bold_num"])
+            _w(ws, row_num, col_start + 1 + i, year_totals[i], formats["bold_num"])
         row_num += 1
 
         for row in sorted(year_rows, key=lambda r: r["month"]):
             label = f"01.{int(row['month']):02d}.{int(year)}"
-            _w(ws, row_num, 1, label, formats["indent2"])
+            _w(ws, row_num, col_start, label, formats["indent2"])
             for i in range(value_count):
-                _w(ws, row_num, 2 + i, row["values"][i], formats["num"])
+                _w(ws, row_num, col_start + 1 + i, row["values"][i], formats["num"])
             row_num += 1
 
     return row_num
@@ -298,10 +334,14 @@ def _write_monthly_sheet(
     metric_col: str,
     output_type: str,
     formats: dict,
+    filtered_pivot_tables: list[dict] | None = None,
+    filter_summary: dict[str, str] | None = None,
 ) -> None:
+    # Filtered table starts 2 columns after the 14-column original (col 17).
+    _FILT_BASE = 17
+
     ws = wb.add_worksheet(sheet_name)
     ws.hide_gridlines(2)
-
     ws.set_column(0, 0, 35)
     ws.set_column(1, 13, 17)
 
@@ -320,6 +360,36 @@ def _write_monthly_sheet(
         _w(ws, 5, i + 2, month, formats["bold_blue_bottom"])
     _w(ws, 5, 14, "Grand Total", formats["bold_blue_bottom"])
 
+    _write_monthly_body(ws, 1, pivot_tables, formats)
+
+    if filtered_pivot_tables and filter_summary:
+        ws.set_column(_FILT_BASE - 1, _FILT_BASE - 1, 35)
+        ws.set_column(_FILT_BASE, _FILT_BASE + 12, 17)
+
+        for row_i, (key, value) in enumerate(filter_summary.items(), start=1):
+            _w(ws, row_i, _FILT_BASE, key, formats["blue"])
+            _w(ws, row_i, _FILT_BASE + 1, value, formats["blue"])
+
+        _w(ws, 4, _FILT_BASE, f"Sum of {metric_col}", formats["bold_blue"])
+        _w(ws, 4, _FILT_BASE + 1, "Column Labels", formats["bold_blue"])
+        for c in range(_FILT_BASE + 2, _FILT_BASE + 14):
+            _w(ws, 4, c, None, formats["blue"])
+
+        _w(ws, 5, _FILT_BASE, "Row Labels", formats["bold_blue_bottom"])
+        for i, month in enumerate(_ALL_MONTHS):
+            _w(ws, 5, _FILT_BASE + i + 1, month, formats["bold_blue_bottom"])
+        _w(ws, 5, _FILT_BASE + 13, "Grand Total", formats["bold_blue_bottom"])
+
+        _write_monthly_body(ws, _FILT_BASE, filtered_pivot_tables, formats)
+
+
+def _write_monthly_body(
+    ws: xlsxwriter.worksheet.Worksheet,
+    col_base: int,
+    pivot_tables: list[dict],
+    formats: dict,
+) -> None:
+    """Write scenario/year/tariff rows starting at *col_base* (1-indexed Row Labels column)."""
     row_num = 6
     all_month_totals = [0.0] * 12
     has_data = [False] * 12
@@ -332,13 +402,13 @@ def _write_monthly_sheet(
         sc_vals = _month_values(months_in_data, sc_agg)
         sc_grand = sum(v for v in sc_vals if v is not None)
 
-        _w(ws, row_num, 1, str(pt["title"]), formats["bold_bottom"])
+        _w(ws, row_num, col_base, str(pt["title"]), formats["bold_bottom"])
         for i, value in enumerate(sc_vals):
-            _w(ws, row_num, i + 2, value, formats["bold_num_bottom"])
+            _w(ws, row_num, col_base + i + 1, value, formats["bold_num_bottom"])
             if value is not None:
                 all_month_totals[i] += value
                 has_data[i] = True
-        _w(ws, row_num, 14, sc_grand, formats["bold_num_bottom"])
+        _w(ws, row_num, col_base + 13, sc_grand, formats["bold_num_bottom"])
         row_num += 1
 
         years: dict[int, list[dict]] = {}
@@ -351,31 +421,31 @@ def _write_monthly_sheet(
             yr_vals = _month_values(months_in_data, yr_agg)
             yr_grand = sum(v for v in yr_vals if v is not None)
 
-            _w(ws, row_num, 1, str(year), formats["bold_indent1"])
+            _w(ws, row_num, col_base, str(year), formats["bold_indent1"])
             for i, value in enumerate(yr_vals):
                 if value is not None:
-                    _w(ws, row_num, i + 2, value, formats["bold_num"])
-            _w(ws, row_num, 14, yr_grand, formats["bold_num"])
+                    _w(ws, row_num, col_base + i + 1, value, formats["bold_num"])
+            _w(ws, row_num, col_base + 13, yr_grand, formats["bold_num"])
             row_num += 1
 
             for row in yr_rows:
                 tariff_vals = _month_values(months_in_data, row["values"])
                 tariff_grand = sum(v for v in tariff_vals if v is not None)
-                _w(ws, row_num, 1, row["tariff"], formats["indent2"])
+                _w(ws, row_num, col_base, row["tariff"], formats["indent2"])
                 for i, value in enumerate(tariff_vals):
                     if value is not None:
-                        _w(ws, row_num, i + 2, value, formats["num"])
-                _w(ws, row_num, 14, tariff_grand, formats["num"])
+                        _w(ws, row_num, col_base + i + 1, value, formats["num"])
+                _w(ws, row_num, col_base + 13, tariff_grand, formats["num"])
                 row_num += 1
 
     grand_total = sum(all_month_totals)
-    _w(ws, row_num, 1, "Grand Total", formats["bold_blue"])
+    _w(ws, row_num, col_base, "Grand Total", formats["bold_blue"])
     for i, value in enumerate(all_month_totals):
         if has_data[i]:
-            _w(ws, row_num, i + 2, value, formats["bold_blue_num"])
+            _w(ws, row_num, col_base + i + 1, value, formats["bold_blue_num"])
         else:
-            _w(ws, row_num, i + 2, None, formats["bold_blue"])
-    _w(ws, row_num, 14, grand_total, formats["bold_blue_num"])
+            _w(ws, row_num, col_base + i + 1, None, formats["bold_blue"])
+    _w(ws, row_num, col_base + 13, grand_total, formats["bold_blue_num"])
 
 
 def _write_delta_sheet(
@@ -385,10 +455,14 @@ def _write_delta_sheet(
     metric_col: str,
     output_type: str,
     formats: dict,
+    filtered_delta_tables: list[dict] | None = None,
+    filter_summary: dict[str, str] | None = None,
 ) -> None:
+    # Filtered table starts 2 columns after the 4-column original (col 7).
+    _FILT_BASE = 7
+
     ws = wb.add_worksheet(sheet_name)
     ws.hide_gridlines(2)
-
     ws.set_column(0, 0, 35)
     ws.set_column(1, 3, 25)
 
@@ -397,6 +471,27 @@ def _write_delta_sheet(
     _w(ws, 2, 1, "MACHINE_NAME", formats["blue"])
     _w(ws, 2, 2, "(All)", formats["blue"])
 
+    _write_delta_body(ws, 1, delta_tables, metric_col, formats)
+
+    if filtered_delta_tables and filter_summary:
+        ws.set_column(_FILT_BASE - 1, _FILT_BASE - 1, 35)
+        ws.set_column(_FILT_BASE, _FILT_BASE + 3, 25)
+
+        for row_i, (key, value) in enumerate(filter_summary.items(), start=1):
+            _w(ws, row_i, _FILT_BASE, key, formats["blue"])
+            _w(ws, row_i, _FILT_BASE + 1, value, formats["blue"])
+
+        _write_delta_body(ws, _FILT_BASE, filtered_delta_tables, metric_col, formats)
+
+
+def _write_delta_body(
+    ws: xlsxwriter.worksheet.Worksheet,
+    col_base: int,
+    delta_tables: list[dict],
+    metric_col: str,
+    formats: dict,
+) -> None:
+    """Write delta-pair tables starting at *col_base* (1-indexed Row Labels column)."""
     row_num = 4
 
     for dt in delta_tables:
@@ -407,23 +502,23 @@ def _write_delta_sheet(
         delta_total: float = dt["delta_total"]
         dt_rows: list[dict] = dt["rows"]
 
-        _w(ws, row_num, 1, "Row Labels", formats["bold_blue_bottom"])
-        _w(ws, row_num, 2, left_name, formats["bold_blue_bottom"])
-        _w(ws, row_num, 3, right_name, formats["bold_blue_bottom"])
-        _w(ws, row_num, 4, f"Dif of {metric_col}", formats["bold_blue"])
+        _w(ws, row_num, col_base,     "Row Labels",             formats["bold_blue_bottom"])
+        _w(ws, row_num, col_base + 1, left_name,                formats["bold_blue_bottom"])
+        _w(ws, row_num, col_base + 2, right_name,               formats["bold_blue_bottom"])
+        _w(ws, row_num, col_base + 3, f"Dif of {metric_col}",   formats["bold_blue"])
         row_num += 1
 
         for row in dt_rows:
-            _w(ws, row_num, 1, str(row["year"]), formats["indent1"])
-            _w(ws, row_num, 2, row["left_value"], formats["num"])
-            _w(ws, row_num, 3, row["right_value"], formats["num"])
-            _w(ws, row_num, 4, row["delta"], formats["num"])
+            _w(ws, row_num, col_base,     str(row["year"]),   formats["indent1"])
+            _w(ws, row_num, col_base + 1, row["left_value"],  formats["num"])
+            _w(ws, row_num, col_base + 2, row["right_value"], formats["num"])
+            _w(ws, row_num, col_base + 3, row["delta"],       formats["num"])
             row_num += 1
 
-        _w(ws, row_num, 1, "Grand Total", formats["bold_blue_top"])
-        _w(ws, row_num, 2, left_total, formats["bold_blue_num_top"])
-        _w(ws, row_num, 3, right_total, formats["bold_blue_num_top"])
-        _w(ws, row_num, 4, delta_total, formats["bold_blue_num_top"])
+        _w(ws, row_num, col_base,     "Grand Total",  formats["bold_blue_top"])
+        _w(ws, row_num, col_base + 1, left_total,     formats["bold_blue_num_top"])
+        _w(ws, row_num, col_base + 2, right_total,    formats["bold_blue_num_top"])
+        _w(ws, row_num, col_base + 3, delta_total,    formats["bold_blue_num_top"])
         row_num += 2
 
 

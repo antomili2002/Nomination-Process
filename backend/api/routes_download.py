@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Response
 
 from backend.api.schemas import ReportGenerationRequest
 from backend.core.exceptions import InvalidChainError, InvalidWorkbookError, ScenarioExtractionError
+from backend.domain.dimension_filters import DimensionFilters
 from backend.services import download_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -33,12 +34,18 @@ def _to_http(exc: Exception) -> HTTPException:
 def export_report(body: ReportGenerationRequest):
     """Generate and stream the Excel report file for download."""
     try:
+        dim_filters: DimensionFilters | None = None
+        if body.dimension_filters:
+            df = body.dimension_filters
+            dim_filters = DimensionFilters(
+                machine_names=df.machine_names,
+                plant_names=df.plant_names,
+                unit_names=df.unit_names,
+                fuel_names=df.fuel_names,
+            )
         excel_bytes, filename = download_service.create_excel_report(
-            body.upload_id,
-            body.iv_chain,
-            body.ev_chain,
-            body.selected_machines,
-            body.selected_metrics,
+            body.upload_id, body.iv_chain, body.ev_chain,
+            body.selected_machines, body.selected_metrics, dim_filters,
         )
     except Exception as exc:
         raise _to_http(exc)

@@ -11,6 +11,7 @@ import datetime
 from typing import Optional
 
 from backend.core.config import settings
+from backend.domain.dimension_filters import DimensionFilters
 from backend.excel import report_writer
 from backend.services import report_service
 from backend.storage.processed_uploads import load_workbook_data
@@ -22,30 +23,60 @@ def create_excel_report(
     ev_chain: list[int],
     selected_machines: Optional[list[str]],
     selected_metrics: Optional[list[str]] = None,
+    dimension_filters: Optional[DimensionFilters] = None,
 ) -> tuple[bytes, str]:
-    """Generate the full Excel report and return ``(excel_bytes, filename)``.
-
-    Raises
-    ------
-    FileNotFoundError
-        If *upload_id* is unknown (upload expired or never existed).
-    InvalidChainError / InvalidWorkbookError / ScenarioExtractionError
-        Propagated from the underlying service layer.
-    """
-    # Load parsed artifacts once for both report computation and raw-sheet copy.
     workbook = load_workbook_data(settings.upload_dir / upload_id)
 
     report_data = report_service.generate_report_from_workbook(
         workbook, upload_id, iv_chain, ev_chain, selected_machines, selected_metrics
     )
 
+    filtered_report_data: dict | None = None
+    filter_summary: dict[str, str] | None = None
+    if dimension_filters and not dimension_filters.is_empty():
+        filtered_report_data = report_service.generate_report_from_workbook(
+            workbook, upload_id, iv_chain, ev_chain,
+            None, selected_metrics, dimension_filters,
+        )
+        filter_summary = _build_filter_summary(dimension_filters)
+
     excel_bytes = report_writer.write_report(
         report_data,
         workbook.info_df,
         workbook.raw_data_df,
+        filtered_report_data=filtered_report_data,
+        filter_summary=filter_summary,
     )
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"scenario_report_{timestamp}.xlsx"
 
     return excel_bytes, filename
+
+
+def _build_filter_summary(filters: DimensionFilters) -> dict[str, str]:
+    """Build a compact label → value mapping for the Excel filter header."""
+    summary: dict[str, str] = {}
+    for label, values in [
+        ("PLANT_NAME",   filters.plant_names),
+        ("UNIT_NAME",    filters.unit_names),
+        ("MACHINE_NAME", filters.machine_names),
+        ("FUEL_NAME",    filters.fuel_names),
+    ]:
+        if values is not None:
+            summary[label] = values[0] if len(values) == 1 else "(Multiple Items)"
+    return summary
+
+
+def _build_filter_summary(filters: DimensionFilters) -> dict[str, str]:
+    """Build a compact label → value mapping for the Excel filter header."""
+    summary: dict[str, str] = {}
+    for label, values in [
+        ("PLANT_NAME",   filters.plant_names),
+        ("UNIT_NAME",    filters.unit_names),
+        ("MACHINE_NAME", filters.machine_names),
+        ("FUEL_NAME",    filters.fuel_names),
+    ]:
+        if values is not None:
+            summary[label] = values[0] if len(values) == 1 else "(Multiple Items)"
+    return summary
