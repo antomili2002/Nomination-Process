@@ -49,7 +49,9 @@ npx tsc --noEmit -p tsconfig.app.json
 
 ## Other design notes in this folder
 
-`architecture-performance-refactor.md`, `pivot-export-architecture.md`,
-`portfolio-layouts.md`, `portfolio-configuration.md`, `report-metrics-v2.md`,
-`persistence-options.md`, `deployment.md` and others capture historical design
+- [interactive-pivot-export-plan.md](interactive-pivot-export-plan.md) — research +
+  plan for exporting **native, interactive Excel PivotTables** (additive; leaves the
+  current static export unchanged).
+
+`architecture-performance-refactor.md` and `deployment.md` capture historical design
 decisions; the two guides above reflect the **current** implementation.
