@@ -45,11 +45,17 @@ export function ResultPage({ reportData, onReset }: Props) {
   const [nonUkPeriod, setNonUkPeriod] = useState<'monthly' | 'yearly'>('yearly')
 
   // -- Dimension filter comparison ------------------------------------------
-  const [filteredData, setFilteredData] = useState<ReportData | null>(null)
-  const [filterCache, setFilterCache]   = useState<Map<string, ReportData>>(new Map())
-  const [filtering, setFiltering]       = useState(false)
+  const [filteredData,  setFilteredData]  = useState<ReportData | null>(null)
+  const [filterCache,   setFilterCache]   = useState<Map<string, ReportData>>(new Map())
+  const [filtering,     setFiltering]     = useState(false)
   const [activeFilters, setActiveFilters] = useState<DimensionFilters | null>(null)
-  const [downloading, setDownloading]   = useState(false)
+
+  const [filteredData2,  setFilteredData2]  = useState<ReportData | null>(null)
+  const [filterCache2,   setFilterCache2]   = useState<Map<string, ReportData>>(new Map())
+  const [filtering2,     setFiltering2]     = useState(false)
+  const [activeFilters2, setActiveFilters2] = useState<DimensionFilters | null>(null)
+
+  const [downloading, setDownloading] = useState(false)
 
   function filterKey(f: DimensionFilters): string {
     return JSON.stringify({
@@ -105,6 +111,42 @@ export function ResultPage({ reportData, onReset }: Props) {
     }
   }
 
+  async function applyDimensionFilter2(filters: DimensionFilters | null) {
+    setActiveFilters2(filters)
+    if (!filters) { setFilteredData2(null); return }
+    const key = filterKey(filters)
+    if (filterCache2.has(key)) { setFilteredData2(filterCache2.get(key)!); return }
+    setFiltering2(true)
+    try {
+      const resp = await fetch(buildApiUrl('/reports/generate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          upload_id: reportData.uploadId,
+          iv_chain:  reportData.ivChain,
+          ev_chain:  reportData.evChain,
+          selected_machines: null,
+          selected_metrics:  reportData.selectedMetrics,
+          dimension_filters: {
+            machine_names: filters.machineNames,
+            plant_names:   filters.plantNames,
+            unit_names:    filters.unitNames,
+            fuel_names:    filters.fuelNames,
+          },
+        }),
+      })
+      if (!resp.ok) throw new Error(`Filter 2 failed (${resp.status})`)
+      const p = await resp.json()
+      const nd: ReportData = { ...mapPayload(p, reportData), selectedMachines: null }
+      setFilterCache2(prev => new Map(prev).set(key, nd))
+      setFilteredData2(nd)
+    } catch {
+      setFilteredData2(null)
+    } finally {
+      setFiltering2(false)
+    }
+  }
+
   // -- Download state -------------------------------------------------------
 
   async function handleDownload() {
@@ -124,6 +166,12 @@ export function ResultPage({ reportData, onReset }: Props) {
             plant_names:   activeFilters.plantNames,
             unit_names:    activeFilters.unitNames,
             fuel_names:    activeFilters.fuelNames,
+          } : null,
+          dimension_filters_2: activeFilters2 ? {
+            machine_names: activeFilters2.machineNames,
+            plant_names:   activeFilters2.plantNames,
+            unit_names:    activeFilters2.unitNames,
+            fuel_names:    activeFilters2.fuelNames,
           } : null,
         }),
       })
@@ -276,7 +324,12 @@ export function ResultPage({ reportData, onReset }: Props) {
                   </>}
               {activeFilters && (
                 <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10, background: 'var(--clr-blue-light)', color: 'var(--clr-blue)', fontWeight: 600 }}>
-                  {filterLabel(activeFilters)}
+                  F1: {filterLabel(activeFilters)}
+                </span>
+              )}
+              {activeFilters2 && (
+                <span style={{ marginLeft: 4, padding: '1px 7px', borderRadius: 10, background: 'var(--clr-blue-light)', color: 'var(--clr-blue)', fontWeight: 600 }}>
+                  F2: {filterLabel(activeFilters2)}
                 </span>
               )}
             </p>
@@ -289,6 +342,14 @@ export function ResultPage({ reportData, onReset }: Props) {
               activeFilters={activeFilters}
               onApply={applyDimensionFilter}
               loading={filtering}
+              label="Filter 1"
+            />
+            <DimensionFilterPanel
+              options={reportData.filterOptions}
+              activeFilters={activeFilters2}
+              onApply={applyDimensionFilter2}
+              loading={filtering2}
+              label="Filter 2"
             />
             <button
               className="btn btn--ghost btn--sm"
@@ -331,7 +392,7 @@ export function ResultPage({ reportData, onReset }: Props) {
           {(filteredData || filtering) && (
             <div style={{ flex: 1, minWidth: 0, overflowX: 'auto', borderLeft: '2px solid var(--clr-blue)', paddingLeft: 24 }}>
               <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-blue)' }}>
-                {activeFilters ? filterLabel(activeFilters) : 'Filtered'}
+                {activeFilters ? filterLabel(activeFilters) : 'Filter 1'}
               </p>
               {filtering && (
                 <div style={{ padding: 32, textAlign: 'center', color: 'var(--clr-text-muted)' }}>
@@ -354,6 +415,41 @@ export function ResultPage({ reportData, onReset }: Props) {
                   {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
                     <YearlyDeltaSection
                       tables={findMetric(filteredData.metrics, activeSection.metricKey)?.deltas ?? []}
+                      metric={activeSection.column}
+                    />
+                  )}
+                </>
+              })()}
+            </div>
+          )}
+
+          {/* Filter 2 comparison pane */}
+          {(filteredData2 || filtering2) && (
+            <div style={{ flex: 1, minWidth: 0, overflowX: 'auto', borderLeft: '2px solid var(--clr-blue)', paddingLeft: 24 }}>
+              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--clr-blue)' }}>
+                {activeFilters2 ? filterLabel(activeFilters2) : 'Filter 2'}
+              </p>
+              {filtering2 && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--clr-text-muted)' }}>
+                  <span className="spinner" aria-hidden="true" />
+                  <span style={{ marginLeft: 8 }}>Computing…</span>
+                </div>
+              )}
+              {!filtering2 && filteredData2 && (() => {
+                const filteredNonUkSections2 = filteredData2.nonUkSections.filter(
+                  s => s.output_type === nonUkOutputType && s.period === nonUkPeriod
+                )
+                return <>
+                  {isNonUk && <NonUkCategorySections sections={filteredNonUkSections2} />}
+                  {!isNonUk && activeSection?.tableType === 'monthly' && (
+                    <ExcelPivotSection
+                      tables={findMetric(filteredData2.metrics, activeSection.metricKey)?.monthly ?? []}
+                      isDelta={false}
+                    />
+                  )}
+                  {!isNonUk && activeSection?.tableType === 'yearlyDelta' && (
+                    <YearlyDeltaSection
+                      tables={findMetric(filteredData2.metrics, activeSection.metricKey)?.deltas ?? []}
                       metric={activeSection.column}
                     />
                   )}

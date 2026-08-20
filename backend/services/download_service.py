@@ -24,6 +24,7 @@ def create_excel_report(
     selected_machines: Optional[list[str]],
     selected_metrics: Optional[list[str]] = None,
     dimension_filters: Optional[DimensionFilters] = None,
+    dimension_filters2: Optional[DimensionFilters] = None,
 ) -> tuple[bytes, str]:
     workbook = load_workbook_data(settings.upload_dir / upload_id)
 
@@ -40,12 +41,23 @@ def create_excel_report(
         )
         filter_summary = _build_filter_summary(dimension_filters)
 
+    filtered_report_data2: dict | None = None
+    filter_summary2: dict[str, str] | None = None
+    if dimension_filters2 and not dimension_filters2.is_empty():
+        filtered_report_data2 = report_service.generate_report_from_workbook(
+            workbook, upload_id, iv_chain, ev_chain,
+            None, selected_metrics, dimension_filters2,
+        )
+        filter_summary2 = _build_filter_summary(dimension_filters2)
+
     excel_bytes = report_writer.write_report(
         report_data,
         workbook.info_df,
         workbook.raw_data_df,
         filtered_report_data=filtered_report_data,
         filter_summary=filter_summary,
+        filtered_report_data2=filtered_report_data2,
+        filter_summary2=filter_summary2,
     )
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

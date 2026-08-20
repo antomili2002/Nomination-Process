@@ -43,9 +43,18 @@ def export_report(body: ReportGenerationRequest):
                 unit_names=df.unit_names,
                 fuel_names=df.fuel_names,
             )
+        dim_filters2: DimensionFilters | None = None
+        if body.dimension_filters_2:
+            df2 = body.dimension_filters_2
+            dim_filters2 = DimensionFilters(
+                machine_names=df2.machine_names,
+                plant_names=df2.plant_names,
+                unit_names=df2.unit_names,
+                fuel_names=df2.fuel_names,
+            )
         excel_bytes, filename = download_service.create_excel_report(
             body.upload_id, body.iv_chain, body.ev_chain,
-            body.selected_machines, body.selected_metrics, dim_filters,
+            body.selected_machines, body.selected_metrics, dim_filters, dim_filters2,
         )
     except Exception as exc:
         raise _to_http(exc)

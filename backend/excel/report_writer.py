@@ -26,6 +26,8 @@ def write_report(
     data_df: pd.DataFrame,
     filtered_report_data: dict | None = None,
     filter_summary: dict[str, str] | None = None,
+    filtered_report_data2: dict | None = None,
+    filter_summary2: dict[str, str] | None = None,
 ) -> bytes:
     tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
     tmp_path = tmp.name
@@ -34,7 +36,8 @@ def write_report(
     try:
         # Disable constant-memory mode when writing a comparison so we can
         # write filtered columns alongside original ones in the same rows.
-        wb = xlsxwriter.Workbook(tmp_path, {"constant_memory": filtered_report_data is None})
+        has_comparison = filtered_report_data is not None or filtered_report_data2 is not None
+        wb = xlsxwriter.Workbook(tmp_path, {"constant_memory": not has_comparison})
         formats = _create_formats(wb)
 
         if report_data.get("layout", LAYOUT_UK) == LAYOUT_NON_UK:
@@ -42,12 +45,16 @@ def write_report(
                 wb, report_data["non_uk_sections"], formats,
                 filtered_sections=filtered_report_data["non_uk_sections"] if filtered_report_data else None,
                 filter_summary=filter_summary,
+                filtered_sections2=filtered_report_data2["non_uk_sections"] if filtered_report_data2 else None,
+                filter_summary2=filter_summary2,
             )
         else:
             _write_uk_metric_sheets(
                 wb, report_data["metrics"], formats,
                 filtered_metrics=filtered_report_data["metrics"] if filtered_report_data else None,
                 filter_summary=filter_summary,
+                filtered_metrics2=filtered_report_data2["metrics"] if filtered_report_data2 else None,
+                filter_summary2=filter_summary2,
             )
 
         _df_to_sheet(wb, "Info", info_df, write_header=False, formats=formats)
@@ -68,23 +75,30 @@ def _write_uk_metric_sheets(
     formats: dict,
     filtered_metrics: list[dict] | None = None,
     filter_summary: dict[str, str] | None = None,
+    filtered_metrics2: list[dict] | None = None,
+    filter_summary2: dict[str, str] | None = None,
 ) -> None:
     """Write one monthly + one delta sheet per metric for the UK layout."""
     used_prefixes: set[str] = set()
     for i, metric in enumerate(metrics):
         prefix = _unique_prefix(metric["excel_prefix"], used_prefixes)
-        filt = filtered_metrics[i] if filtered_metrics and i < len(filtered_metrics) else None
+        filt  = filtered_metrics[i]  if filtered_metrics  and i < len(filtered_metrics)  else None
+        filt2 = filtered_metrics2[i] if filtered_metrics2 and i < len(filtered_metrics2) else None
         _write_monthly_sheet(
             wb, f"{prefix}_month",
             metric["monthly"], metric["column"], metric["output_type"], formats,
-            filtered_pivot_tables=filt["monthly"] if filt else None,
+            filtered_pivot_tables=filt["monthly"]  if filt  else None,
             filter_summary=filter_summary,
+            filtered_pivot_tables2=filt2["monthly"] if filt2 else None,
+            filter_summary2=filter_summary2,
         )
         _write_delta_sheet(
             wb, f"{prefix}_sheet",
             metric["deltas"], metric["column"], metric["output_type"], formats,
-            filtered_delta_tables=filt["deltas"] if filt else None,
+            filtered_delta_tables=filt["deltas"]  if filt  else None,
             filter_summary=filter_summary,
+            filtered_delta_tables2=filt2["deltas"] if filt2 else None,
+            filter_summary2=filter_summary2,
         )
 
 
@@ -162,8 +176,10 @@ def _write_non_uk_sheets(
     formats: dict,
     filtered_sections: list[dict] | None = None,
     filter_summary: dict[str, str] | None = None,
+    filtered_sections2: list[dict] | None = None,
+    filter_summary2: dict[str, str] | None = None,
 ) -> None:
-    """Write the four non-UK views; optionally add filtered comparison to the right."""
+    """Write the four non-UK views; optionally add up to two filtered comparisons."""
     for output_type, period, sheet_name in (
         ("IV", "yearly", "IV_Yearly"),
         ("IV", "monthly", "IV_Monthly"),
@@ -181,19 +197,29 @@ def _write_non_uk_sheets(
             s for s in (filtered_sections or [])
             if s["output_type"] == output_type and s["period"] == period
         ]
-        has_comparison = bool(matching_filtered and filter_summary)
+        matching_filtered2 = [
+            s for s in (filtered_sections2 or [])
+            if s["output_type"] == output_type and s["period"] == period
+        ]
+        has_comparison  = bool(matching_filtered  and filter_summary)
+        has_comparison2 = bool(matching_filtered2 and filter_summary2)
 
         # Compute column widths: Row Labels + N value columns
         orig_width = (1 + len(matching[0]["columns"])) if matching else 2
-        # 2-column gap then filtered table
-        filt_col_start = orig_width + 3 if has_comparison else None
+        # Each comparison table sits 2 columns to the right of the previous one.
+        filt_col_start  = orig_width + 3                  if has_comparison  else None
+        filt2_col_start = 2 * orig_width + 5              if has_comparison2 else None
 
         ws.set_column(0, 0, 34)
         ws.set_column(1, orig_width, 26)
         if filt_col_start:
-            fc = filt_col_start - 1  # 0-indexed
+            fc = filt_col_start - 1
             ws.set_column(fc, fc, 34)
             ws.set_column(fc + 1, fc + orig_width + 1, 26)
+        if filt2_col_start:
+            fc2 = filt2_col_start - 1
+            ws.set_column(fc2, fc2, 34)
+            ws.set_column(fc2 + 1, fc2 + orig_width + 1, 26)
 
         _w(ws, 1, 1, "OUTPUT_TYPE", formats["blue"])
         _w(ws, 1, 2, output_type, formats["blue"])
@@ -204,6 +230,10 @@ def _write_non_uk_sheets(
             for row_i, (key, value) in enumerate(filter_summary.items(), start=1):  # type: ignore[union-attr]
                 _w(ws, row_i, filt_col_start, key, formats["blue"])
                 _w(ws, row_i, filt_col_start + 1, value, formats["blue"])
+        if filt2_col_start:
+            for row_i, (key, value) in enumerate(filter_summary2.items(), start=1):  # type: ignore[union-attr]
+                _w(ws, row_i, filt2_col_start, key, formats["blue"])
+                _w(ws, row_i, filt2_col_start + 1, value, formats["blue"])
 
         row_num = 4
         for i, section in enumerate(matching):
@@ -213,6 +243,11 @@ def _write_non_uk_sheets(
                 _write_non_uk_category_table(
                     ws, start_row, matching_filtered[i], formats,
                     col_start=filt_col_start,  # type: ignore[arg-type]
+                )
+            if has_comparison2 and i < len(matching_filtered2):
+                _write_non_uk_category_table(
+                    ws, start_row, matching_filtered2[i], formats,
+                    col_start=filt2_col_start,  # type: ignore[arg-type]
                 )
             row_num += 2
 
@@ -336,9 +371,11 @@ def _write_monthly_sheet(
     formats: dict,
     filtered_pivot_tables: list[dict] | None = None,
     filter_summary: dict[str, str] | None = None,
+    filtered_pivot_tables2: list[dict] | None = None,
+    filter_summary2: dict[str, str] | None = None,
 ) -> None:
-    # Filtered table starts 2 columns after the 14-column original (col 17).
-    _FILT_BASE = 17
+    _FILT_BASE  = 17  # original 14 cols + 2-col gap + 1
+    _FILT2_BASE = 33  # filter-1 14 cols + 2-col gap + 1 after filter-1
 
     ws = wb.add_worksheet(sheet_name)
     ws.hide_gridlines(2)
@@ -362,25 +399,26 @@ def _write_monthly_sheet(
 
     _write_monthly_body(ws, 1, pivot_tables, formats)
 
-    if filtered_pivot_tables and filter_summary:
-        ws.set_column(_FILT_BASE - 1, _FILT_BASE - 1, 35)
-        ws.set_column(_FILT_BASE, _FILT_BASE + 12, 17)
-
-        for row_i, (key, value) in enumerate(filter_summary.items(), start=1):
-            _w(ws, row_i, _FILT_BASE, key, formats["blue"])
-            _w(ws, row_i, _FILT_BASE + 1, value, formats["blue"])
-
-        _w(ws, 4, _FILT_BASE, f"Sum of {metric_col}", formats["bold_blue"])
-        _w(ws, 4, _FILT_BASE + 1, "Column Labels", formats["bold_blue"])
-        for c in range(_FILT_BASE + 2, _FILT_BASE + 14):
+    for base, tables, summary in (
+        (_FILT_BASE,  filtered_pivot_tables,  filter_summary),
+        (_FILT2_BASE, filtered_pivot_tables2, filter_summary2),
+    ):
+        if not (tables and summary):
+            continue
+        ws.set_column(base - 1, base - 1, 35)
+        ws.set_column(base, base + 12, 17)
+        for row_i, (key, value) in enumerate(summary.items(), start=1):
+            _w(ws, row_i, base, key, formats["blue"])
+            _w(ws, row_i, base + 1, value, formats["blue"])
+        _w(ws, 4, base, f"Sum of {metric_col}", formats["bold_blue"])
+        _w(ws, 4, base + 1, "Column Labels", formats["bold_blue"])
+        for c in range(base + 2, base + 14):
             _w(ws, 4, c, None, formats["blue"])
-
-        _w(ws, 5, _FILT_BASE, "Row Labels", formats["bold_blue_bottom"])
+        _w(ws, 5, base, "Row Labels", formats["bold_blue_bottom"])
         for i, month in enumerate(_ALL_MONTHS):
-            _w(ws, 5, _FILT_BASE + i + 1, month, formats["bold_blue_bottom"])
-        _w(ws, 5, _FILT_BASE + 13, "Grand Total", formats["bold_blue_bottom"])
-
-        _write_monthly_body(ws, _FILT_BASE, filtered_pivot_tables, formats)
+            _w(ws, 5, base + i + 1, month, formats["bold_blue_bottom"])
+        _w(ws, 5, base + 13, "Grand Total", formats["bold_blue_bottom"])
+        _write_monthly_body(ws, base, tables, formats)
 
 
 def _write_monthly_body(
@@ -457,9 +495,11 @@ def _write_delta_sheet(
     formats: dict,
     filtered_delta_tables: list[dict] | None = None,
     filter_summary: dict[str, str] | None = None,
+    filtered_delta_tables2: list[dict] | None = None,
+    filter_summary2: dict[str, str] | None = None,
 ) -> None:
-    # Filtered table starts 2 columns after the 4-column original (col 7).
-    _FILT_BASE = 7
+    _FILT_BASE  = 7   # original 4 cols + 2-col gap + 1
+    _FILT2_BASE = 13  # filter-1 4 cols + 2-col gap + 1 after filter-1
 
     ws = wb.add_worksheet(sheet_name)
     ws.hide_gridlines(2)
@@ -473,15 +513,18 @@ def _write_delta_sheet(
 
     _write_delta_body(ws, 1, delta_tables, metric_col, formats)
 
-    if filtered_delta_tables and filter_summary:
-        ws.set_column(_FILT_BASE - 1, _FILT_BASE - 1, 35)
-        ws.set_column(_FILT_BASE, _FILT_BASE + 3, 25)
-
-        for row_i, (key, value) in enumerate(filter_summary.items(), start=1):
-            _w(ws, row_i, _FILT_BASE, key, formats["blue"])
-            _w(ws, row_i, _FILT_BASE + 1, value, formats["blue"])
-
-        _write_delta_body(ws, _FILT_BASE, filtered_delta_tables, metric_col, formats)
+    for base, tables, summary in (
+        (_FILT_BASE,  filtered_delta_tables,  filter_summary),
+        (_FILT2_BASE, filtered_delta_tables2, filter_summary2),
+    ):
+        if not (tables and summary):
+            continue
+        ws.set_column(base - 1, base - 1, 35)
+        ws.set_column(base, base + 3, 25)
+        for row_i, (key, value) in enumerate(summary.items(), start=1):
+            _w(ws, row_i, base, key, formats["blue"])
+            _w(ws, row_i, base + 1, value, formats["blue"])
+        _write_delta_body(ws, base, tables, metric_col, formats)
 
 
 def _write_delta_body(

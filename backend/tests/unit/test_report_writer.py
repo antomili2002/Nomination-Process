@@ -573,3 +573,41 @@ def test_non_uk_report_writes_consolidated_iv_ev_monthly_yearly_sheets(
 
     assert all("%" not in str(cell.value) for row in iv_yearly.iter_rows() for cell in row if cell.value)
     assert all("tariff" not in str(cell.value).lower() for row in iv_yearly.iter_rows() for cell in row if cell.value)
+
+
+def test_non_uk_report_writes_filter2_comparison_at_third_column_position(
+    simple_info_df,
+    simple_data_df,
+):
+    """Filter 2 table appears 2 cols to the right of where Filter 1 would sit."""
+    columns = [
+        {"label": "Base", "kind": "scenario"},
+        {"label": "Final", "kind": "scenario"},
+        {"label": "Final - Base", "kind": "delta"},
+    ]
+    section = {
+        "output_type": "IV",
+        "period": "yearly",
+        "category": "Core Value Metrics",
+        "columns": columns,
+        "rows": [
+            {"metric_key": "iv", "metric_label": "Intrinsic Value", "metric_column": "INTRINSIC_VALUE__CUR", "year": 2026, "values": [4000.0, 7200.0, 3200.0]},
+        ],
+    }
+    report_data = {"layout": "non_uk", "metrics": [], "non_uk_sections": [section]}
+    filtered2  = {"layout": "non_uk", "metrics": [], "non_uk_sections": [
+        {**section, "rows": [{"metric_key": "iv", "metric_label": "Intrinsic Value", "metric_column": "INTRINSIC_VALUE__CUR", "year": 2026, "values": [100.0, 200.0, 100.0]}]},
+    ]}
+
+    wb = openpyxl.load_workbook(io.BytesIO(write_report(
+        report_data, simple_info_df, simple_data_df,
+        filtered_report_data2=filtered2,
+        filter_summary2={"FUEL_NAME": "Gas"},
+    )))
+
+    iv = wb["IV_Yearly"]
+    # orig_width = 1 (Row Labels) + 3 (columns) = 4
+    # filt2_col_start = 2*4 + 5 = 13
+    assert iv.cell(1, 13).value == "FUEL_NAME"
+    assert iv.cell(1, 14).value == "Gas"
+    assert iv.cell(5, 13).value == "Row Labels"   # Filter-2 header row

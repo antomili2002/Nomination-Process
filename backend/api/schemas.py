@@ -53,6 +53,7 @@ class ReportGenerationRequest(BaseModel):
     selected_machines: Optional[list[str]] = None
     selected_metrics: Optional[list[str]] = None
     dimension_filters: Optional[DimensionFiltersSchema] = None
+    dimension_filters_2: Optional[DimensionFiltersSchema] = None
 
 
 class DeltaPairInfo(BaseModel):

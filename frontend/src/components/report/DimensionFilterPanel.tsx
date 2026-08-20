@@ -7,6 +7,7 @@ interface Props {
   activeFilters: DimensionFilters | null
   onApply: (filters: DimensionFilters | null) => void
   loading: boolean
+  label?: string
 }
 
 const EMPTY: DimensionFilters = { machineNames: null, plantNames: null, unitNames: null, fuelNames: null }
@@ -20,7 +21,7 @@ function activeCount(f: DimensionFilters | null): number {
   return [f.plantNames, f.unitNames, f.machineNames, f.fuelNames].filter(v => v !== null).length
 }
 
-export function DimensionFilterPanel({ options, activeFilters, onApply, loading }: Props) {
+export function DimensionFilterPanel({ options, activeFilters, onApply, loading, label = "Filter" }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [pending, setPending] = useState<DimensionFilters>(EMPTY)
   const ref = useRef<HTMLDivElement>(null)
@@ -81,7 +82,7 @@ export function DimensionFilterPanel({ options, activeFilters, onApply, loading 
         }}
       >
         <SlidersHorizontal size={14} aria-hidden="true" />
-        {isActive ? `Filter (${count})` : "Filter"}
+        {isActive ? `${label} (${count})` : label}
       </button>
 
       {isOpen && (
