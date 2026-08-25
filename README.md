@@ -81,6 +81,22 @@ Python package installers are blocked on some managed laptops. Miniconda install
 	python -m pip install -r requirements.txt
 	```
 
+6. If you get an error message like this:
+
+	```text
+	CondaSSLError: Encountered an SSL error.
+	Most likely a certificate verification issue.
+
+	SSLError: [SSL: CERTIFICATE_VERIFY_FAILED]
+	certificate verify failed: unable to get local issuer certificate
+	```
+
+	Then you need to run the following command:
+
+	```powershell
+	conda config --set ssl_verify false
+	```
+
 ### 3. Install Node.js And npm Without An MSI
 
 `npm` is included with the Node.js ZIP binary. Download the current LTS **Windows x64 Binary (.zip)** from the official page: [nodejs.org/en/download](https://nodejs.org/en/download). This guide uses the ZIP because it avoids the MSI installer.
