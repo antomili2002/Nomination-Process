@@ -24,3 +24,4 @@ backend/tmp/
 # PyInstaller output
 /build/
 /dist/
+packaging/app.ico

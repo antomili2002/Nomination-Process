@@ -7,24 +7,24 @@ The **Scenario Delta Report Generator** is a reporting tool designed to parse, c
 
 ## Windows Executable (End Users)
 
-The application ships as a single file, `ScenarioDeltaReport.exe`. Users do not need Python, Node.js or any other installation.
+The application is distributed as an installer, `ScenarioDeltaReport-Setup-0.1.0.exe`. Users do not need Python, Node.js or any other installation, and no administrator rights are required.
 
-1. Double-click `ScenarioDeltaReport.exe`.
-2. A console window opens with the credits and the local address (for example `http://127.0.0.1:53124`). The default browser opens the application automatically.
+1. Run the installer. It installs to `%LOCALAPPDATA%\Programs\ScenarioDeltaReport` and creates Start-menu (and optional desktop) shortcuts.
+2. Start **Scenario Delta Report Generator**. A console window opens with the credits and the local address (for example `http://127.0.0.1:53124`). The default browser opens the application automatically.
 3. Close the console window to stop the application.
 
-Uploaded workbooks are stored temporarily in `%LOCALAPPDATA%\ScenarioDeltaReport` and stale uploads are removed automatically.
+Uploaded workbooks and generated reports are stored in `%LOCALAPPDATA%\ScenarioDeltaReport`. They are deleted every time the application starts, and while it runs, anything older than 4 hours is removed every 15 minutes. Uninstalling removes this folder too.
 
 ### Building The Executable
 
-Complete the setup below (Miniconda + Node.js). Then run this from the repository root:
+Complete the setup below (Miniconda + Node.js). For the installer, also install [Inno Setup 6](https://jrsoftware.org/isdl.php) (per-user install is fine). Then run this from the repository root:
 
 ```powershell
 conda activate nomination-process
 .\packaging\build.ps1
 ```
 
-The script builds the React frontend (`frontend/dist`), installs PyInstaller and bundles everything into `dist\ScenarioDeltaReport.exe` using [packaging/ScenarioDeltaReport.spec](packaging/ScenarioDeltaReport.spec).
+The script builds the React frontend, converts `frontend/public/Uniper Energie-Analytics App-Symbol.png` into the exe icon, bundles the app into `dist\ScenarioDeltaReport\` with [packaging/ScenarioDeltaReport.spec](packaging/ScenarioDeltaReport.spec) and, if Inno Setup is found, compiles [packaging/installer.iss](packaging/installer.iss) into `dist\ScenarioDeltaReport-Setup-0.1.0.exe`. Without Inno Setup, zip the `dist\ScenarioDeltaReport` folder and distribute that instead.
 
 ## Windows Setup And Run Guide
 

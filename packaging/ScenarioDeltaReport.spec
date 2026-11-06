@@ -1,4 +1,5 @@
 # PyInstaller spec - build with: pyinstaller packaging/ScenarioDeltaReport.spec
+# Onedir mode: no unpacking to %TEMP% on every start, so startup is much faster.
 from PyInstaller.utils.hooks import collect_submodules
 
 ROOT = SPECPATH + "/.."
@@ -21,11 +22,19 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="ScenarioDeltaReport",
     console=True,
     upx=False,
+    icon=SPECPATH + "/app.ico",
     version=SPECPATH + "/version_info.txt",
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    upx=False,
+    name="ScenarioDeltaReport",
 )

@@ -61,20 +61,28 @@ def get_report_path(report_id: str) -> Path:
 
 
 def cleanup_stale_uploads(now: float | None = None) -> int:
-    """Delete upload directories older than the configured TTL.
+    """Delete upload and report directories older than the configured TTL.
 
     Returns the number of directories deleted. Failures for individual
     directories are ignored so cleanup cannot break request handling.
     """
-    upload_dir = settings.upload_dir
-    if not upload_dir.exists():
+    cutoff = (time.time() if now is None else now) - settings.upload_ttl_seconds
+    return sum(_delete_dirs(root, cutoff) for root in (settings.upload_dir, settings.report_dir))
+
+
+def purge_all_temp_data() -> int:
+    """Delete every upload and report directory regardless of age."""
+    return sum(_delete_dirs(root, None) for root in (settings.upload_dir, settings.report_dir))
+
+
+def _delete_dirs(root: Path, cutoff: float | None) -> int:
+    if not root.exists():
         return 0
 
-    cutoff = (time.time() if now is None else now) - settings.upload_ttl_seconds
     deleted = 0
-    for entry in upload_dir.iterdir():
+    for entry in root.iterdir():
         try:
-            if entry.is_dir() and entry.stat().st_mtime < cutoff:
+            if entry.is_dir() and (cutoff is None or entry.stat().st_mtime < cutoff):
                 shutil.rmtree(entry)
                 deleted += 1
         except OSError:

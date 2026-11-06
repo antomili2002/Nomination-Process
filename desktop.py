@@ -50,6 +50,9 @@ def main() -> None:
     import uvicorn
 
     from backend.main import app  # imported after env vars so settings pick them up
+    from backend.storage.temp_files import purge_all_temp_data
+
+    purge_all_temp_data()
 
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
