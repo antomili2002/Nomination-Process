@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes_download import router as download_router
 from backend.api.routes_reports import router as reports_router
@@ -50,7 +51,13 @@ async def lifespan(_app: FastAPI):
             await cleanup_task
 
 
-app = FastAPI(title="Scenario Delta Report API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Scenario Delta Report API",
+    version="0.1.0",
+    description="Scenario Delta Report Generator - developed by Antonio Militello.",
+    contact={"name": "Antonio Militello"},
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,7 +71,15 @@ app.include_router(upload_router)
 app.include_router(reports_router)
 app.include_router(download_router)
 
+# Same routes under /api so the built frontend can call them on the same origin.
+for _router in (upload_router, reports_router, download_router):
+    app.include_router(_router, prefix="/api", include_in_schema=False)
+
 
 @app.get("/healthz", tags=["health"])
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+if settings.frontend_dist_dir and settings.frontend_dist_dir.is_dir():
+    app.mount("/", StaticFiles(directory=settings.frontend_dist_dir, html=True), name="frontend")

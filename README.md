@@ -1,7 +1,30 @@
 # Scenario Delta Report Generator
 
+**Author:** Antonio Militello
+
 ## Overview
 The **Scenario Delta Report Generator** is a reporting tool designed to parse, compare, and summarize scenario-based generation outputs from Excel workbooks. It handles complex nomination/scenario processes where scenarios form a logical chain (e.g., Base -> Intermediate -> Final).
+
+## Windows Executable (End Users)
+
+The application ships as a single file, `ScenarioDeltaReport.exe`. Users do not need Python, Node.js or any other installation.
+
+1. Double-click `ScenarioDeltaReport.exe`.
+2. A console window opens with the credits and the local address (for example `http://127.0.0.1:53124`). The default browser opens the application automatically.
+3. Close the console window to stop the application.
+
+Uploaded workbooks are stored temporarily in `%LOCALAPPDATA%\ScenarioDeltaReport` and stale uploads are removed automatically.
+
+### Building The Executable
+
+Complete the setup below (Miniconda + Node.js). Then run this from the repository root:
+
+```powershell
+conda activate nomination-process
+.\packaging\build.ps1
+```
+
+The script builds the React frontend (`frontend/dist`), installs PyInstaller and bundles everything into `dist\ScenarioDeltaReport.exe` using [packaging/ScenarioDeltaReport.spec](packaging/ScenarioDeltaReport.spec).
 
 ## Windows Setup And Run Guide
 
@@ -183,4 +206,6 @@ TypeScript is already declared in the frontend's development dependencies. Do **
 ![Machine Filter UI](docs/screenshots/machine_filter.png)
 
 ---
+*Scenario Delta Report Generator — developed by Antonio Militello.*
+
 *For detailed technical information, architecture, file structures, and implementation details, please see [project.md](project.md).*

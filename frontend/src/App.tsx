@@ -76,7 +76,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        Scenario Delta Report Generator - Uniper Energy SE
+        Scenario Delta Report Generator - Uniper Energy SE · Developed by Antonio Militello
       </footer>
     </div>
   )
