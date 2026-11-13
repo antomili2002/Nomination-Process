@@ -175,6 +175,63 @@ class TestPreviewChain:
         assert resp.status_code == 404
 
 
+# POST /reports/generate with optional chains
+class TestOptionalChains:
+    def _generate(self, upload_id: str, iv_chain: list[int], ev_chain: list[int]):
+        return client.post("/reports/generate", json={
+            "upload_id": upload_id,
+            "iv_chain": iv_chain,
+            "ev_chain": ev_chain,
+        })
+
+    def test_ev_only_returns_200_with_ev_metric(self, uploaded):
+        resp = self._generate(uploaded["upload_id"], [], _EV_CHAIN_SIMPLE)
+        assert resp.status_code == 200, resp.text
+        assert _metric_keys(resp.json()) == {"ev"}
+
+    def test_iv_only_returns_200_without_ev_metric(self, uploaded):
+        resp = self._generate(uploaded["upload_id"], _IV_CHAIN_SIMPLE, [])
+        assert resp.status_code == 200, resp.text
+        keys = _metric_keys(resp.json())
+        assert "ev" not in keys
+        assert "iv" in keys
+
+    def test_no_scenarios_returns_422_with_message(self, uploaded):
+        resp = self._generate(uploaded["upload_id"], [], [])
+        assert resp.status_code == 422
+        assert "at least one" in resp.json()["detail"]
+
+    def test_omitted_chains_return_422(self, uploaded):
+        resp = client.post("/reports/generate", json={"upload_id": uploaded["upload_id"]})
+        assert resp.status_code == 422
+
+    def test_preview_chain_ev_only(self, uploaded_module):
+        resp = client.post("/reports/preview-chain", json={
+            "upload_id": uploaded_module["upload_id"],
+            "iv_chain": [],
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["iv_pairs"] == []
+        assert len(resp.json()["ev_pairs"]) == 1
+
+    def test_export_ev_only(self, uploaded):
+        resp = client.post("/reports/export", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": [],
+            "ev_chain": _EV_CHAIN_SIMPLE,
+        })
+        assert resp.status_code == 200, resp.text
+
+    def test_export_iv_only(self, uploaded):
+        resp = client.post("/reports/export", json={
+            "upload_id": uploaded["upload_id"],
+            "iv_chain": _IV_CHAIN_SIMPLE,
+            "ev_chain": [],
+        })
+        assert resp.status_code == 200, resp.text
+
+
 # POST /reports/data-preview
 class TestDataPreview:
     def test_new_iv_heat_dashboards_are_returned(self, uploaded_module):

@@ -30,6 +30,24 @@ def validate_chain(chain: list[int], available_indices: set[int]) -> None:
         raise InvalidChainError(f"Scenario indices not found in upload: {missing}")
 
 
+NO_SCENARIOS_SELECTED_MESSAGE = (
+    "Please select at least one scenario chain (IV or EV) and at least two scenarios to generate the report."
+)
+
+
+def validate_chains(
+    iv_chain: list[int],
+    ev_chain: list[int],
+    available_indices: set[int],
+) -> None:
+    """Validate the IV and EV chains; either may be empty, but not both."""
+    if not iv_chain and not ev_chain:
+        raise InvalidChainError(NO_SCENARIOS_SELECTED_MESSAGE)
+    for chain in (iv_chain, ev_chain):
+        if chain:
+            validate_chain(chain, available_indices)
+
+
 def build_delta_pairs(
     chain: list[int],
     index_to_name: dict[int, str],

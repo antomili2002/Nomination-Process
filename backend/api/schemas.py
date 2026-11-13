@@ -48,8 +48,9 @@ class UploadResponse(BaseModel):
 
 class ReportGenerationRequest(BaseModel):
     upload_id: str
-    iv_chain: list[int] = Field(..., min_length=2)
-    ev_chain: list[int] = Field(..., min_length=2)
+    # Either chain may be empty to skip it; the service rejects both empty.
+    iv_chain: list[int] = Field(default_factory=list)
+    ev_chain: list[int] = Field(default_factory=list)
     selected_machines: Optional[list[str]] = None
     selected_metrics: Optional[list[str]] = None
     dimension_filters: Optional[DimensionFiltersSchema] = None
@@ -67,8 +68,8 @@ class DeltaPairInfo(BaseModel):
 
 class ChainPreviewRequest(BaseModel):
     upload_id: str
-    iv_chain: list[int] = Field(..., min_length=2)
-    ev_chain: list[int] = Field(..., min_length=2)
+    iv_chain: list[int] = Field(default_factory=list)
+    ev_chain: list[int] = Field(default_factory=list)
 
 
 class ChainPreviewResponse(BaseModel):
@@ -93,8 +94,8 @@ class PivotTable(BaseModel):
 
 class DataPreviewRequest(BaseModel):
     upload_id: str
-    iv_chain: list[int] = Field(..., min_length=2)
-    ev_chain: list[int] = Field(..., min_length=2)
+    iv_chain: list[int] = Field(default_factory=list)
+    ev_chain: list[int] = Field(default_factory=list)
     selected_machines: Optional[list[str]] = None
 
 

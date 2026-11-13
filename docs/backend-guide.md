@@ -201,8 +201,8 @@ The main endpoint. Request:
 ```jsonc
 ReportGenerationRequest {
   upload_id: str,
-  iv_chain: int[],                 // >= 2 scenario indices, ordered base..final
-  ev_chain: int[],                 // >= 2
+  iv_chain: int[],                 // empty (skip IV) or >= 2 indices, ordered base..final
+  ev_chain: int[],                 // empty (skip EV) or >= 2; at least one chain required
   selected_machines: str[] | null, // null = all machines summed
   selected_metrics: str[] | null   // metric keys; null = all available
 }

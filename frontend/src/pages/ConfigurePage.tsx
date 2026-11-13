@@ -1,7 +1,7 @@
 ﻿import React, { useMemo, useRef, useState } from 'react'
 import type { UploadContext, ScenarioRow, ReportData } from '../App'
 import { buildApiUrl } from '../api'
-import { buildInitialChains } from './scenarioChains'
+import { buildInitialChains, validateChains } from './scenarioChains'
 import type { ChainState } from './scenarioChains'
 import type { MetricInfo } from '../types/report'
 
@@ -49,6 +49,7 @@ export function ConfigurePage({ uploadCtx, onBack, onSuccess }: Props) {
 const { scenarios, machines, uploadId, fileName, availableMetrics, asOfDate, filterOptions } = uploadCtx
 
   const [chains, setChains] = useState<ChainState>(() => buildInitialChains(scenarios))
+  const chainError = validateChains(chains)
   const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(
     () => new Set(availableMetrics.filter(m => m.defaultSelected).map(m => m.key))
   )
@@ -375,6 +376,7 @@ const { scenarios, machines, uploadId, fileName, availableMetrics, asOfDate, fil
         )}
       </div>
 
+      {chainError && <div className="alert alert--info" role="status">{chainError}</div>}
       {error && <div className="alert alert--error" role="alert">{error}</div>}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-4)' }}>
@@ -382,7 +384,7 @@ const { scenarios, machines, uploadId, fileName, availableMetrics, asOfDate, fil
         <button
           className="btn btn--primary btn--lg"
           onClick={handleGenerate}
-          disabled={loading || chains.iv.length < 2 || chains.ev.length < 2 || selectedMetrics.size === 0}
+          disabled={loading || chainError !== null || selectedMetrics.size === 0}
         >
           {loading
             ? <><span className="spinner spinner--sm" aria-hidden="true" />Generating…</>

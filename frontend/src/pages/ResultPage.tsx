@@ -41,7 +41,9 @@ export function ResultPage({ reportData, onReset }: Props) {
   // -- Section navigation ---------------------------------------------------
   const [activeId, setActiveId] = useState<string>(() => sections[0]?.id ?? '')
   const activeSection = sections.find(s => s.id === activeId) ?? sections[0]
-  const [nonUkOutputType, setNonUkOutputType] = useState<'IV' | 'EV'>('IV')
+  const [nonUkOutputType, setNonUkOutputType] = useState<'IV' | 'EV'>(
+    () => reportData.nonUkSections.some(s => s.output_type === 'IV') ? 'IV' : 'EV'
+  )
   const [nonUkPeriod, setNonUkPeriod] = useState<'monthly' | 'yearly'>('yearly')
 
   // -- Dimension filter comparison ------------------------------------------

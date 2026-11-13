@@ -2,7 +2,13 @@
 import pytest
 
 from backend.core.exceptions import InvalidChainError
-from backend.processing.chain_builder import DeltaPair, build_delta_pairs, validate_chain
+from backend.processing.chain_builder import (
+    NO_SCENARIOS_SELECTED_MESSAGE,
+    DeltaPair,
+    build_delta_pairs,
+    validate_chain,
+    validate_chains,
+)
 
 # Fixture scenario map matching conftest.py sample workbook
 # index 0-5: Base_IV, Outage_IV, Final_IV, Base_EV, Outage_EV, Final_EV
@@ -40,6 +46,36 @@ def test_validate_passes_for_two_element_chain():
 
 def test_validate_passes_for_three_element_chain():
     validate_chain([3, 4, 5], AVAILABLE)  # must not raise
+
+
+# validate_chains — IV and EV chains are each optional
+
+def test_validate_chains_passes_with_only_ev_chain():
+    validate_chains([], [3, 5], AVAILABLE)  # must not raise
+
+
+def test_validate_chains_passes_with_only_iv_chain():
+    validate_chains([0, 2], [], AVAILABLE)  # must not raise
+
+
+def test_validate_chains_passes_with_both_chains():
+    validate_chains([0, 2], [3, 5], AVAILABLE)  # must not raise
+
+
+def test_validate_chains_raises_when_no_scenarios_selected():
+    with pytest.raises(InvalidChainError) as exc_info:
+        validate_chains([], [], AVAILABLE)
+    assert str(exc_info.value) == NO_SCENARIOS_SELECTED_MESSAGE
+    assert "at least one" in str(exc_info.value)
+
+
+def test_validate_chains_still_validates_non_empty_chain():
+    with pytest.raises(InvalidChainError, match="at least 2"):
+        validate_chains([], [3], AVAILABLE)
+
+
+def test_build_delta_pairs_empty_chain_yields_no_pairs():
+    assert build_delta_pairs([], INDEX_TO_NAME) == []
 
 
 # build_delta_pairs — two-element chain

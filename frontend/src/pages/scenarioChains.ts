@@ -40,6 +40,20 @@ function orderByNamingConvention(scenarios: ScenarioRow[]): ScenarioRow[] {
     .map(item => item.scenario)
 }
 
+export const NO_SCENARIOS_SELECTED_MESSAGE =
+  'Please select at least one scenario chain (IV or EV) to generate the report.'
+
+/** Returns a user-facing message when the chains cannot be used, or null when valid. */
+export function validateChains(chains: ChainState): string | null {
+  if (chains.iv.length === 0 && chains.ev.length === 0) return NO_SCENARIOS_SELECTED_MESSAGE
+  for (const [key, label] of [['iv', 'IV'], ['ev', 'EV']] as const) {
+    if (chains[key].length === 1) {
+      return `The ${label} chain needs at least 2 scenarios (base and final), or remove it entirely to skip ${label}.`
+    }
+  }
+  return null
+}
+
 export function buildInitialChains(scenarios: ScenarioRow[]): ChainState {
   const ev = orderByNamingConvention(scenarios.filter(isEvScenario)).map(s => s.index)
   const iv = orderByNamingConvention(scenarios.filter(s => isIvScenario(s) || !isEvScenario(s))).map(s => s.index)

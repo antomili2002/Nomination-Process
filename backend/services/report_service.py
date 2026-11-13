@@ -23,7 +23,8 @@ from backend.domain.dimension_filters import DimensionFilters
 from backend.domain.layout import LAYOUT_NON_UK, layout_for_country
 from backend.domain.report_metrics import REPORT_METRICS, ReportMetric, available_metrics
 from backend.domain.workbook import WorkbookData
-from backend.processing.chain_builder import DeltaPair, build_delta_pairs, validate_chain
+from backend.core.exceptions import InvalidChainError
+from backend.processing.chain_builder import DeltaPair, build_delta_pairs, validate_chains
 from backend.processing.report_builder import (
     ReportAggregationCache,
     build_available_machines,
@@ -82,10 +83,7 @@ def _prepare_chain_context(
     """Validate both chains and assemble the shared aggregation context."""
     data_df = workbook.clean_data_df
     index_to_name = _build_index_map(workbook.scenarios_df)
-    available = set(index_to_name)
-
-    validate_chain(iv_chain, available)
-    validate_chain(ev_chain, available)
+    validate_chains(iv_chain, ev_chain, set(index_to_name))
 
     resolved_machines = selected_machines
     if dimension_filters is not None:
@@ -118,15 +116,24 @@ def _apply_extra_filters(df: pd.DataFrame, filters: DimensionFilters) -> pd.Data
 
 
 def _select_metrics(
-    data_df: pd.DataFrame,
+    ctx: _ChainContext,
     selected_metrics: Optional[list[str]],
 ) -> tuple[ReportMetric, ...]:
-    """Return every available metric, filtered to ``selected_metrics`` if given."""
-    metrics = available_metrics(data_df)
-    if selected_metrics is None:
-        return metrics
-    selected_set = set(selected_metrics)
-    return tuple(m for m in metrics if m.key in selected_set)
+    """Return available metrics, filtered to ``selected_metrics`` and to non-empty chains."""
+    metrics = available_metrics(ctx.data_df)
+    if selected_metrics is not None:
+        selected_set = set(selected_metrics)
+        metrics = tuple(m for m in metrics if m.key in selected_set)
+    computable = tuple(
+        m for m in metrics if _chain_for_metric(m, ctx.iv_chain, ctx.ev_chain)
+    )
+    if metrics and not computable:
+        missing = "EV" if not ctx.ev_chain else "IV"
+        raise InvalidChainError(
+            f"The selected metrics all require the {missing} scenario chain, which is empty. "
+            f"Add scenarios to the {missing} chain or select metrics for the other chain."
+        )
+    return computable
 
 
 # DataPreviewResponse still has one fixed field pair per curated metric — this
@@ -151,10 +158,7 @@ def preview_chain(upload_id: str, iv_chain: list[int], ev_chain: list[int]) -> d
     """
     workbook = _load_workbook_data(upload_id)
     index_to_name = _build_index_map(workbook.scenarios_df)
-    available = set(index_to_name)
-
-    validate_chain(iv_chain, available)
-    validate_chain(ev_chain, available)
+    validate_chains(iv_chain, ev_chain, set(index_to_name))
 
     return {
         "iv_pairs": build_delta_pairs(iv_chain, index_to_name),
@@ -185,16 +189,21 @@ def preview_data_from_workbook(
     ctx = _prepare_chain_context(workbook, iv_chain, ev_chain, selected_machines)
     result: dict = {"available_machines": build_available_machines(ctx.data_df)}
     for metric in REPORT_METRICS:
+        monthly_field, deltas_field = _PREVIEW_FIELD_NAMES[metric.key]
+        chain_indices = _chain_for_metric(metric, ctx.iv_chain, ctx.ev_chain)
+        if not chain_indices:
+            result[monthly_field] = []
+            result[deltas_field] = []
+            continue
         tables = build_metric_preview(
             data_df=ctx.data_df,
-            chain_indices=_chain_for_metric(metric, ctx.iv_chain, ctx.ev_chain),
+            chain_indices=chain_indices,
             pairs=_pairs_for_metric(metric, ctx.iv_pairs, ctx.ev_pairs),
             metric=metric,
             index_to_name=ctx.index_to_name,
             selected_machines=ctx.selected_machines,
             cache=ctx.cache,
         )
-        monthly_field, deltas_field = _PREVIEW_FIELD_NAMES[metric.key]
         result[monthly_field] = tables["monthly"]
         result[deltas_field] = tables["deltas"]
     return result
@@ -227,7 +236,7 @@ def generate_report_from_workbook(
 ) -> dict:
     """Build the report payload for the workbook's portfolio layout."""
     ctx = _prepare_chain_context(workbook, iv_chain, ev_chain, selected_machines, dimension_filters)
-    metrics = _select_metrics(ctx.data_df, selected_metrics)
+    metrics = _select_metrics(ctx, selected_metrics)
     layout = layout_for_country(workbook.portfolio_country)
 
     payload: dict = {
